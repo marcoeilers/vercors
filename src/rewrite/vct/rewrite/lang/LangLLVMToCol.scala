@@ -20,7 +20,8 @@ case class LangLLVMToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
       signals = Seq.empty,
       givenArgs = Seq.empty,
       yieldsArgs = Seq.empty,
-      decreases = None)(func.contract.blame)(func.contract.o)
+      decreases = None,
+      staticLevel = None)(func.contract.blame)(func.contract.o)
 
 
     rw.labelDecls.scope {

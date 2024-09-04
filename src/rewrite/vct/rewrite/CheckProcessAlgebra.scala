@@ -111,6 +111,7 @@ case class CheckProcessAlgebra[Pre <: Generation]() extends Rewriter[Pre] with L
           Seq(),
           Seq(),
           None,
+          None,
         )(???),
         false,
         false

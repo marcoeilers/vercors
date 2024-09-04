@@ -122,7 +122,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
     case _: ClassDeclaration[_] => false // FIXME we should have a way of translating static specification-type declarations
   }
 
-  def makeJavaClass(prefName: String, decls: Seq[ClassDeclaration[Pre]], ref: Ref[Post, Class[Post]], isStaticPart: Boolean)(implicit o: Origin): Unit = {
+  def makeJavaClass(prefName: String, decls: Seq[ClassDeclaration[Pre]], ref: Ref[Post, Class[Post]], isStaticPart: Boolean, clz: Option[JavaClassOrInterface[Pre]] = None)(implicit o: Origin): Unit = {
     // First, declare all the fields, so we can refer to them.
     decls.foreach {
       case fields: JavaFields[Pre] =>
@@ -174,6 +174,23 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
       }
     }
 
+    val sharedInitPres = (diz: Expr[Post]) => {
+      rw.currentThis.having(diz) {
+        decls.collect {
+          case init: JavaSharedInitialization[Pre] => init.contract.requires
+        }
+      }
+    }
+
+    val staticFields = decls.collect {
+      case jf: JavaFields[Pre] if jf.modifiers.exists(m => m.toString == "static") => jf
+    }
+
+    val staticInv = clz match {
+      case Some(cls: JavaClass[Pre]) => cls.staticInvariant
+      case _ => None
+    }
+
     // 3. the body of the constructor
 
     val declsDefault = if(decls.collect { case _: JavaConstructor[Pre] => () }.isEmpty) {
@@ -206,7 +223,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
              field assignments required for ConstantifyFinalFields.
            */
           ensures = if(isStaticPart) UnitAccountedPredicate(tt[Pre]) else fieldPerms,
-          contextEverywhere = tt, signals = Nil, givenArgs = Nil, yieldsArgs = Nil, decreases = None,
+          contextEverywhere = tt, signals = Nil, givenArgs = Nil, yieldsArgs = Nil, decreases = None, staticLevel = None
         )(TrueSatisfiable)
       )(PanicBlame("The postcondition of a default constructor cannot fail."))
       if (!isStaticPart) javaDefaultConstructor(currentJavaClass.top) = cons
@@ -221,27 +238,46 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
         val resVar = new Variable[Post](t)(ThisVar)
         val res = Local[Post](resVar.ref)
         rw.labelDecls.scope {
-          javaConstructor(cons) = rw.globalDeclarations.declare(withResult((result: Result[Post]) =>
-            new Procedure(
-              returnType = t,
-              args = rw.variables.collect { cons.parameters.map(rw.dispatch) }._1,
-              outArgs = Nil, typeArgs = Nil,
-              body = rw.currentThis.having(res) { Some(Scope(Seq(resVar), Block(Seq(
+          javaConstructor(cons) = rw.globalDeclarations.declare(withResult((result: Result[Post]) => {
+            val sharedInitPresApplied = sharedInitPres(res)
+            println(sharedInitPresApplied)
+            println(staticFields)
+            println(staticInv)
+            val body = rw.currentThis.having(res) {
+              Some(Scope(Seq(resVar), Block(Seq(
                 assignLocal(res, NewObject(ref)),
                 fieldInit(res),
                 sharedInit(res),
                 rw.dispatch(cons.body),
                 Return(res),
-              )))) },
-              contract = rw.currentThis.having(result) { cons.contract.rewrite(
+              ))))
+            }
+            val sharedInitPreHead = if (sharedInitPresApplied.nonEmpty)
+              SplitAccountedPredicate(left= sharedInitPresApplied.head, right = cons.contract.requires)
+            else
+              cons.contract.requires
+
+            new Procedure(
+              returnType = t,
+              args = rw.variables.collect { cons.parameters.map(rw.dispatch) }._1,
+              outArgs = Nil, typeArgs = Nil,
+              body = body,
+              contract = rw.currentThis.having(result) {
+                val ensure = if (staticInv.isDefined)
+                  SplitAccountedPredicate(left = UnitAccountedPredicate(rw.dispatch(staticInv.get)), right = rw.dispatch(cons.contract.ensures))
+                else
+                  rw.dispatch(cons.contract.ensures)
+                cons.contract.rewrite(
+                requires = rw.dispatch(sharedInitPreHead),
                 ensures = SplitAccountedPredicate(
                   left = UnitAccountedPredicate((result !== Null()) && (TypeOf(result) === TypeValue(t))),
-                  right = rw.dispatch(cons.contract.ensures),
+                  right = ensure,
                 ),
                 signals = cons.contract.signals.map(rw.dispatch) ++
                   cons.signals.map(t => SignalsClause(new Variable(rw.dispatch(t)), tt)),
               ) },
             )(PostBlameSplit.left(PanicBlame("Constructor cannot return null value or value of wrong type."), cons.blame))(JavaConstructorOrigin(cons))
+          }
           ))
         }
       case method: JavaMethod[Pre] =>
@@ -346,7 +382,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
       if(staticDecls.nonEmpty) {
         val staticsClass = new Class[Post](rw.classDeclarations.collect {
           rw.currentThis.having(ThisObject(javaStaticsClassSuccessor.ref(cls))) {
-            makeJavaClass(cls.name + "Statics", staticDecls, javaStaticsClassSuccessor.ref(cls), isStaticPart = true)
+            makeJavaClass(cls.name + "Statics", staticDecls, javaStaticsClassSuccessor.ref(cls), isStaticPart = true, Some(cls))
           }
         }._1, Nil, tt)(JavaStaticsClassOrigin(cls))
 

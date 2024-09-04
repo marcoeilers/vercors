@@ -635,6 +635,7 @@ case class CToCol[G](override val originProvider: OriginProvider, override val b
     case ValContractClause11(_, invariant, _) => collector.lock_invariant += ((contract, convert(invariant)))
     case ValContractClause12(_, None, _) => collector.decreases += ((contract, DecreasesClauseNoRecursion()))
     case ValContractClause12(_, Some(clause), _) => collector.decreases += ((contract, convert(clause)))
+    case ValContractClause13(_, exp, _) => collector.static_invariant += ((contract, convert(exp)))
   }
 
   def convert(implicit clause: ValDecreasesMeasureContext): DecreasesClause[G] = clause match {

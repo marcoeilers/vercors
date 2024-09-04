@@ -75,6 +75,8 @@ VAL_CONTEXT: 'context';
 VAL_LOOP_INVARIANT: 'loop_invariant';
 VAL_KERNEL_INVARIANT: 'kernel_invariant';
 VAL_LOCK_INVARIANT: 'lock_invariant';
+VAL_STATIC_INVARIANT: 'static_invariant';
+VAL_STATIC_LEVEL: 'static_level';
 VAL_SIGNALS: 'signals';
 VAL_DECREASES: 'decreases';
 

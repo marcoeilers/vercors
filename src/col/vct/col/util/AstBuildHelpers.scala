@@ -252,9 +252,10 @@ object AstBuildHelpers {
                signals: Seq[SignalsClause[G]] = Nil,
                givenArgs: Seq[Variable[G]] = Nil, yieldsArgs: Seq[Variable[G]] = Nil,
                decreases: Option[DecreasesClause[G]] = None,
+               staticLevel: Option[DecreasesClause[G]] = None
               )
               (implicit o: Origin): ApplicableContract[G] =
-    ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases)(blame)
+    ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases, staticLevel)(blame)
 
   def withResult[G, T <: ContractApplicable[G]](builder: Result[G] => T)(implicit o: Origin): T = {
     val box = SuccessionMap[Unit, ContractApplicable[G]]()
@@ -276,10 +277,11 @@ object AstBuildHelpers {
                 signals: Seq[SignalsClause[G]] = Nil,
                 givenArgs: Seq[Variable[G]] = Nil, yieldsArgs: Seq[Variable[G]] = Nil,
                 decreases: Option[DecreasesClause[G]] = None,
+                staticLevel: Option[DecreasesClause[G]] = None,
                 inline: Boolean = false, pure: Boolean = false)
                (implicit o: Origin): Procedure[G] =
     new Procedure(returnType, args, outArgs, typeArgs, body,
-      ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases)(contractBlame),
+      ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases, staticLevel)(contractBlame),
       inline, pure)(blame)
 
   def function[G]
@@ -294,9 +296,10 @@ object AstBuildHelpers {
                signals: Seq[SignalsClause[G]] = Nil,
                givenArgs: Seq[Variable[G]] = Nil, yieldsArgs: Seq[Variable[G]] = Nil,
                decreases: Option[DecreasesClause[G]] = Some(DecreasesClauseNoRecursion[G]()(ConstOrigin("decreases"))),
+               staticLevel: Option[DecreasesClause[G]] = Some(DecreasesClauseTuple[G](Seq(IntegerValue[G](0)(ConstOrigin(0))))(ConstOrigin(0))),
                inline: Boolean = false)(implicit o: Origin): Function[G] =
     new Function(returnType, args, typeArgs, body,
-      ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases)(contractBlame),
+      ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases, staticLevel)(contractBlame),
       inline)(blame)
 
   def functionInvocation[G]

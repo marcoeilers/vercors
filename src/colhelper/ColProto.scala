@@ -69,7 +69,9 @@ case class ColProto(info: ColDescription, output: File, writer: (File, String) =
   case class TSet(t: Typ)(val scalaArg: SType) extends Typ
   case class TTuple(ts: Seq[Typ])(val scalaArg: Seq[SType]) extends Typ
 
-  def getType(t: SType): Typ = t match {
+  def getType(t: SType): Typ = {
+    println("recompile please")
+    t match {
     case SType.Apply(SType.Name("Seq"), List(SType.Name("ExpectedError"))) => TName("ExpectedErrors")
 
     case SType.Apply(SType.Name("Seq"), List(arg)) => TSeq(getType(arg))(arg)
@@ -86,6 +88,7 @@ case class ColProto(info: ColDescription, output: File, writer: (File, String) =
     case SType.Name("Boolean") => TBool
     case SType.Name("BigInt") => TBigInt
     case SType.Name("BigDecimal") => TBigDecimal
+  }
   }
 
   val boxedTypes: mutable.Map[Typ, DescriptorProto] = mutable.Map()

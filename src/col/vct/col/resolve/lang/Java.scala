@@ -148,7 +148,7 @@ case object Java extends LazyLogging {
         typeParameters = Nil,
         signals = Nil,
         body = Block(Nil),
-        contract = ApplicableContract(UnitAccountedPredicate(tt), UnitAccountedPredicate(tt), tt, Nil, Nil, Nil, None)(TrueSatisfiable),
+        contract = ApplicableContract(UnitAccountedPredicate(tt), UnitAccountedPredicate(tt), tt, Nil, Nil, Nil, None, None)(TrueSatisfiable),
       )(SourceNameOrigin(cls.getSimpleName, o))
     })
 
@@ -162,7 +162,7 @@ case object Java extends LazyLogging {
         typeParameters = Nil,
         signals = Nil,
         body = None,
-        contract = ApplicableContract(UnitAccountedPredicate(tt), UnitAccountedPredicate(tt), tt, Nil, Nil, Nil, None)(TrueSatisfiable),
+        contract = ApplicableContract(UnitAccountedPredicate(tt), UnitAccountedPredicate(tt), tt, Nil, Nil, Nil, None, None)(TrueSatisfiable),
       )(AbstractApplicable)(SourceNameOrigin(method.getName, o))
     })
 
@@ -197,6 +197,8 @@ case object Java extends LazyLogging {
         modifiers = Nil,
         typeParams = Nil,
         intrinsicLockInvariant = `tt`,
+        staticInvariant = None,
+        staticLevel = None,
         ext = Option(cls.getSuperclass).map(cls => lazyType(cls.getName.split('.').toIndexedSeq, ctx)).getOrElse(JAVA_LANG_OBJECT),
         imp = cls.getInterfaces.toIndexedSeq.map(cls => lazyType(cls.getName.split('.').toIndexedSeq, ctx)),
         decls = fields.toIndexedSeq ++ cons.toIndexedSeq ++ methods.toIndexedSeq,

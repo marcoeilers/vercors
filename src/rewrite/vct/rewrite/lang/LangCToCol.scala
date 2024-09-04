@@ -481,6 +481,7 @@ case class LangCToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends Laz
             newGivenArgs,
             newYieldsArgs,
             contract.decreases.map(rw.dispatch),
+            contract.staticLevel.map(rw.dispatch)
           )(contract.blame)(contract.o)
         )(AbstractApplicable)(o)
         kernelSpecifier = None

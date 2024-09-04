@@ -25,6 +25,8 @@ abstract class ToCol[G](val originProvider: OriginProvider, val blameProvider: B
     val context_everywhere: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
     val kernel_invariant: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
     val lock_invariant: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
+    val static_invariant: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
+    val static_level: mutable.ArrayBuffer[(ParserRuleContext, DecreasesClause[G1])] = mutable.ArrayBuffer()
 
     val given: mutable.ArrayBuffer[(ParserRuleContext, Variable[G1])] = mutable.ArrayBuffer()
     val yields: mutable.ArrayBuffer[(ParserRuleContext, Variable[G1])] = mutable.ArrayBuffer()
@@ -52,7 +54,7 @@ abstract class ToCol[G](val originProvider: OriginProvider, val blameProvider: B
       ApplicableContract(UnitAccountedPredicate(AstBuildHelpers.foldStar(consume(requires))),
                          UnitAccountedPredicate(AstBuildHelpers.foldStar(consume(ensures))),
                          AstBuildHelpers.foldStar(consume(context_everywhere)),
-                         consume(signals), consume(given), consume(yields), consumeOpt(decreases))(blame)
+                         consume(signals), consume(given), consume(yields), consumeOpt(decreases), consumeOpt(static_level))(blame)
     }
 
     def consumeLoopContract(blameNode: ParserRuleContext)(implicit o: Origin): LoopContract[G1] = {

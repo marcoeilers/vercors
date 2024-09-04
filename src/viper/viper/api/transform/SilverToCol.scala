@@ -161,7 +161,7 @@ case class SilverToCol[G](program: silver.Program, blameProvider: BlameProvider)
         requires = col.UnitAccountedPredicate(foldStar(pres.map(transform))(origin(func)))(origin(func)),
         ensures = col.UnitAccountedPredicate(foldStar(posts.map(transform))(origin(func)))(origin(func)),
         contextEverywhere = tt, signals = Nil, givenArgs = Nil, yieldsArgs = Nil,
-        decreases = decreases.flatMap(transform),
+        decreases = decreases.flatMap(transform), staticLevel = None
       )(blame(func))(origin(func)),
       inline = false,
       threadLocal = false,
@@ -196,7 +196,7 @@ case class SilverToCol[G](program: silver.Program, blameProvider: BlameProvider)
         requires = col.UnitAccountedPredicate(foldStar(pres.map(transform))(origin(proc)))(origin(proc)),
         ensures = col.UnitAccountedPredicate(foldStar(posts.map(transform))(origin(proc)))(origin(proc)),
         contextEverywhere = tt, signals = Nil, givenArgs = Nil, yieldsArgs = Nil,
-        decreases = decreases.flatMap(transform),
+        decreases = decreases.flatMap(transform), staticLevel = None
       )(blame(proc))(origin(proc)),
       inline = false,
       pure = false,

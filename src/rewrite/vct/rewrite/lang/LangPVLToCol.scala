@@ -65,7 +65,7 @@ case class LangPVLToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends L
           UnitAccountedPredicate(AstBuildHelpers.foldStar(cls.declarations.collect {
             case field: InstanceField[Pre] =>
               fieldPerm[Post](result, rw.succ(field), WritePerm())
-          }) &* (if (checkRunnable) IdleToken(result) else tt)), tt, Nil, Nil, Nil, None,
+          }) &* (if (checkRunnable) IdleToken(result) else tt)), tt, Nil, Nil, Nil, None, None,
         )(TrueSatisfiable)
       )(defaultBlame)))
     }

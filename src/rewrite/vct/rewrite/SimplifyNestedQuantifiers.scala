@@ -141,8 +141,9 @@ case class SimplifyNestedQuantifiers[Pre <: Generation]() extends Rewriter[Pre] 
     val givenArgs = variables.collect { contract.givenArgs.foreach(dispatch) }._1
     val yieldsArgs = variables.collect {contract.yieldsArgs.foreach(dispatch)}._1
     val decreases = contract.decreases.map(element => rewriter.dispatch(element))
+    val staticLevel = contract.staticLevel.map(element => rewriter.dispatch(element))
 
-    ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases
+    ApplicableContract(requires, ensures, contextEverywhere, signals, givenArgs, yieldsArgs, decreases, staticLevel
       )(contract.blame)(contract.o)
   }
 

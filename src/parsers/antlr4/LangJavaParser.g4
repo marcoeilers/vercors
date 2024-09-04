@@ -153,7 +153,7 @@ interfaceBody
 
 classBodyDeclaration
     :   ';'
-    |   'static'? block
+    |   valEmbedContract? 'static'? block
     |   valEmbedContract? modifier* memberDeclaration
     |   valEmbedClassDeclarationBlock
     ;

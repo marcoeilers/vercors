@@ -1446,7 +1446,7 @@ abstract class CoercingRewriter[Pre <: Generation]() extends AbstractRewriter[Pr
       case namespace: JavaNamespace[Pre] =>
         namespace
       case clazz: JavaClass[Pre] =>
-        new JavaClass[Pre](clazz.name, clazz.modifiers, clazz.typeParams, res(clazz.intrinsicLockInvariant), clazz.ext, clazz.imp, clazz.decls)
+        new JavaClass[Pre](clazz.name, clazz.modifiers, clazz.typeParams, res(clazz.intrinsicLockInvariant), clazz.staticInvariant.map(res), clazz.staticLevel, clazz.ext, clazz.imp, clazz.decls)
       case interface: JavaInterface[Pre] =>
         interface
       case interface: JavaAnnotationInterface[Pre] =>
@@ -1644,8 +1644,8 @@ abstract class CoercingRewriter[Pre <: Generation]() extends AbstractRewriter[Pr
 
   def coerce(node: ApplicableContract[Pre]): ApplicableContract[Pre] = {
     implicit val o: Origin = node.o
-    val ApplicableContract(requires, ensures, context_everywhere, signals, givenArgs, yieldsArgs, decreases) = node
-    ApplicableContract(requires, ensures, res(context_everywhere), signals, givenArgs, yieldsArgs, decreases)(node.blame)
+    val ApplicableContract(requires, ensures, context_everywhere, signals, givenArgs, yieldsArgs, decreases, staticLevel) = node
+    ApplicableContract(requires, ensures, res(context_everywhere), signals, givenArgs, yieldsArgs, decreases, staticLevel)(node.blame)
   }
 
   def coerce(node: AccountedPredicate[Pre]): AccountedPredicate[Pre] = {

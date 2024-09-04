@@ -38,6 +38,8 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
       withContract(contract, contract => {
         Seq(new JavaClass(convert(name), mods.map(convert(_)), args.map(convert(_)).getOrElse(Nil),
           AstBuildHelpers.foldStar(contract.consume(contract.lock_invariant)),
+          contract.consume(contract.static_invariant).headOption,
+          contract.consume(contract.static_level).headOption,
           ext.map(convert(_)).getOrElse(Java.JAVA_LANG_OBJECT),
           imp.map(convert(_)).getOrElse(Nil), decls.flatMap(convert(_))))
       })
@@ -169,7 +171,9 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
 
   def convert(implicit decl: ClassBodyDeclarationContext): Seq[ClassDeclaration[G]] = decl match {
     case ClassBodyDeclaration0(_) => Nil
-    case ClassBodyDeclaration1(isStatic, body) => Seq(new JavaSharedInitialization(isStatic.nonEmpty, convert(body)))
+    case ClassBodyDeclaration1(contract, isStatic, body) => withContract(contract, c => {
+      Seq(new JavaSharedInitialization(isStatic.nonEmpty, convert(body), c.consumeApplicableContract(blame(decl))))
+    })
     case ClassBodyDeclaration2(contract, mods, decl) =>
       withContract(contract, c => {
         convert(decl, mods.map(convert(_)), c)
@@ -961,6 +965,10 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
     case ValContractClause11(_, invariant, _) => collector.lock_invariant += ((contract, convert(invariant)))
     case ValContractClause12(_, None, _) => collector.decreases += ((contract, DecreasesClauseNoRecursion()))
     case ValContractClause12(_, Some(clause), _) => collector.decreases += ((contract, convert(clause)))
+    case ValContractClause13(_, exp, _) =>
+      collector.static_invariant += ((contract, convert(exp)))
+    case ValContractClause14(_, exp, _) =>
+      collector.static_level += ((contract, convert(exp)))
   }
 
   def convert(implicit clause: ValDecreasesMeasureContext): DecreasesClause[G] = clause match {
