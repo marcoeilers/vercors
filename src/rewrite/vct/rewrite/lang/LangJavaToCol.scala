@@ -9,7 +9,7 @@ import vct.col.ref.{LazyRef, Ref}
 import vct.col.resolve.ctx._
 import vct.col.rewrite.{Generation, Rewritten}
 import vct.col.util.AstBuildHelpers._
-import vct.col.util.SuccessionMap
+import vct.col.util.{AstBuildHelpers, SuccessionMap}
 import RewriteHelpers._
 import vct.col.resolve.lang.Java
 import vct.col.resolve.lang.JavaAnnotationData.{BipComponent, BipData, BipGuard, BipTransition}
@@ -89,6 +89,12 @@ case object LangJavaToCol {
   case class NotSupportedInJavaLangStringClass(decl: ClassDeclaration[_]) extends UserError {
     override def code: String = decl.o.messageInContext("This declaration is not supported in the java.lang.String class")
     override def text: String = "notSupportedInStringClass"
+  }
+
+  case class StaticBlockWithNonTrivialSpec(decl: ClassDeclaration[_]) extends UserError {
+    override def code: String = "staticBlockWithNonTrivialSpec"
+
+    override def text: String = decl.o.messageInContext("Static block must not have non-trivial pre- or postconditions.")
   }
 }
 
@@ -174,11 +180,11 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
       }
     }
 
-    val sharedInitPres = (diz: Expr[Post]) => {
+    val sharedInitSpecs = (diz: Expr[Post]) => {
       rw.currentThis.having(diz) {
         decls.collect {
-          case init: JavaSharedInitialization[Pre] => init.contract.requires
-        }
+          case init: JavaSharedInitialization[Pre] => Seq((init.contract.requires, init), (init.contract.ensures, init))
+        }.flatten
       }
     }
 
@@ -239,10 +245,14 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
         val res = Local[Post](resVar.ref)
         rw.labelDecls.scope {
           javaConstructor(cons) = rw.globalDeclarations.declare(withResult((result: Result[Post]) => {
-            val sharedInitPresApplied = sharedInitPres(res)
-            println(sharedInitPresApplied)
-            println(staticFields)
-            println(staticInv)
+            val sharedInitSpecsApplied = sharedInitSpecs(res)
+            val nonTrivialInitSpecs = sharedInitSpecsApplied.filter(s => s._1.toString != "??UnitAccountedPredicate??(true)")
+            nonTrivialInitSpecs.headOption match {
+              case Some((_, init)) => throw StaticBlockWithNonTrivialSpec(init)
+              case _ =>
+            }
+
+
             val body = rw.currentThis.having(res) {
               Some(Scope(Seq(resVar), Block(Seq(
                 assignLocal(res, NewObject(ref)),
@@ -252,10 +262,12 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
                 Return(res),
               ))))
             }
-            val sharedInitPreHead = if (sharedInitPresApplied.nonEmpty)
-              SplitAccountedPredicate(left= sharedInitPresApplied.head, right = cons.contract.requires)
-            else
-              cons.contract.requires
+            val staticFieldPerms = UnitAccountedPredicate(foldStar(staticFields.filter(sf => sf.modifiers.collectFirst { case JavaFinal() => () }.isEmpty).map(sf => sf.decls.indices.map(decl => {
+              val local = JavaLocal[Pre](sf.decls(decl).name)(DerefPerm)
+              local.ref = Some(RefJavaField[Pre](sf, decl))
+              Perm(AmbiguousLocation(local)(PanicBlame("Field location is not a pointer.")), WritePerm())
+            })).flatten))
+            val sharedInitPreHead = SplitAccountedPredicate(left= staticFieldPerms, right = cons.contract.requires)
 
             new Procedure(
               returnType = t,
@@ -268,6 +280,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
                 else
                   rw.dispatch(cons.contract.ensures)
                 cons.contract.rewrite(
+                //decreases = Some(DecreasesClauseTuple(Seq())),
                 requires = rw.dispatch(sharedInitPreHead),
                 ensures = SplitAccountedPredicate(
                   left = UnitAccountedPredicate((result !== Null()) && (TypeOf(result) === TypeValue(t))),

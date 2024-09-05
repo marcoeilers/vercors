@@ -1,5 +1,6 @@
 /*@
   static_level 2;
+  static_invariant Perm(myNumber, write);
   static_invariant myNumber >= 33;
 @*/
 class JavaString {
@@ -10,11 +11,22 @@ class JavaString {
 
     public int intNumber = 0;
 
+
     /*@
-      requires Perm(myNumber,write);
+      requires n > 456;
+      static_level 5;
+    @*/
+    public JavaString(int n) {
+        intNumber = n;
+    }
+
+    /*@
       static_level 4;
     @*/
     static {
+        int i = 0;
+        //while (i == 0) {
+        //}
         myNumber = 42;
     }
 
@@ -24,6 +36,7 @@ class JavaString {
       static_level 5;
     @*/
     public void g() {
+        while (true) {}
         assert myNumber == 0;
         "xuz";
         assert "abc" == "abc";

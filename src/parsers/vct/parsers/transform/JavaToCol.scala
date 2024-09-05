@@ -36,9 +36,10 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
   def convert(implicit decl: TypeDeclarationContext): Seq[GlobalDeclaration[G]] = decl match {
     case TypeDeclaration0(mods, ClassDeclaration0(contract, _, name, args, ext, imp, ClassBody0(_, decls, _))) =>
       withContract(contract, contract => {
+        val staticInvConsumed = contract.consume(contract.static_invariant)
         Seq(new JavaClass(convert(name), mods.map(convert(_)), args.map(convert(_)).getOrElse(Nil),
           AstBuildHelpers.foldStar(contract.consume(contract.lock_invariant)),
-          contract.consume(contract.static_invariant).headOption,
+          if (staticInvConsumed.isEmpty) None else Some(AstBuildHelpers.foldStar(staticInvConsumed)),
           contract.consume(contract.static_level).headOption,
           ext.map(convert(_)).getOrElse(Java.JAVA_LANG_OBJECT),
           imp.map(convert(_)).getOrElse(Nil), decls.flatMap(convert(_))))
