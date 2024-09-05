@@ -24,11 +24,17 @@ class JavaString {
       static_level 4;
     @*/
     static {
-        int i = 0;
-        //while (i == 0) {
-        //}
+        int i = 6;
+        //@ decreases i;
+        while (i > 0)
+        {
+            i--;
+        }
+        //nonTerm();
         myNumber = 42;
     }
+
+    public static void nonTerm() { nonTerm(); }
 
     /*@
       requires Perm(myNumber,write);

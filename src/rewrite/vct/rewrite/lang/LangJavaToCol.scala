@@ -280,7 +280,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
                 else
                   rw.dispatch(cons.contract.ensures)
                 cons.contract.rewrite(
-                //decreases = Some(DecreasesClauseTuple(Seq())),
+                decreases = Some(DecreasesClauseTuple(Seq())),
                 requires = rw.dispatch(sharedInitPreHead),
                 ensures = SplitAccountedPredicate(
                   left = UnitAccountedPredicate((result !== Null()) && (TypeOf(result) === TypeValue(t))),

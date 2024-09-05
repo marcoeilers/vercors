@@ -223,11 +223,18 @@ trait SilverBackend extends Backend with LazyLogging {
         val apply = get[col.Invocation[_]](node)
         apply.ref.decl.blame.blame(blame.TerminationMeasureFailed(apply.ref.decl, apply, getDecreasesClause(reason)))
       case MethodTerminationError(node: Infoed, reason, _) =>
-        val apply = get[col.Invocation[_]](node)
-        apply.ref.decl.blame.blame(blame.TerminationMeasureFailed(apply.ref.decl, apply, getDecreasesClause(reason)))
+        val nodeInfo = info(node)
+        if (nodeInfo.node.isInstanceOf[col.InvokingNode[_]]) {
+          val apply = get[col.InvokingNode[_]](node)
+          apply.ref.decl.blame.blame(blame.TerminationMeasureFailedInvocation(apply.ref.decl, apply))
+        } else {
+          val apply = get[col.Loop[_]](node)
+          //val dc = getDecreasesClause(reason)
+          apply.o.blame(blame.TerminationMeasureFailedLoop(apply))
+        }
       case LoopTerminationError(node: Infoed, reason, _) =>
         val decreases = get[col.DecreasesClause[_]](node)
-        info(node).invariant.get.blame.blame(blame.LoopTerminationMeasureFailed(decreases))
+        decreases.o.blame(blame.LoopTerminationMeasureFailed(decreases))
       case TerminationFailed(node, reason, cached) =>
         throw NotSupported(s"Vercors does not support termination measures from Viper")
       case PackageFailed(node, reason, _) =>

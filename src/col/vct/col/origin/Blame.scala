@@ -215,6 +215,7 @@ case class PostconditionFailed(path: Seq[AccountedDirection], failure: ContractF
   override def descInContext: String = "Postcondition may not hold, since"
   override def inlineDescWithSource(node: String, failure: String): String = s"Postcondition of `$node` may not hold, since $failure."
 }
+
 case class TerminationMeasureFailed(applicable: ContractApplicable[_], apply: Invocation[_], measure: DecreasesClause[_]) extends ContractedFailure with VerificationFailure {
   override def code: String = "decreasesFailed"
   override def position: String = measure.o.shortPosition
@@ -225,6 +226,26 @@ case class TerminationMeasureFailed(applicable: ContractApplicable[_], apply: In
   ))
   override def inlineDesc: String =
     s"`${apply.o.inlineContext}` may not terminate, since `${measure.o.inlineContext}` is not decreased or not bounded"
+}
+
+case class TerminationMeasureFailedInvocation(applicable: ContractApplicable[_], apply: InvokingNode[_]) extends ContractedFailure with VerificationFailure {
+  override def code: String = "decreasesFailed"
+  override def position: String = apply.o.shortPosition
+  override def desc: String = Origin.messagesInContext(Seq(
+    applicable.o -> "Applicable may not terminate, since ...",
+    apply.o -> "... this invocation may not terminate.",
+  ))
+  override def inlineDesc: String =
+    s"`${apply.o.inlineContext}` may not terminate"
+}
+case class TerminationMeasureFailedLoop(apply: Loop[_]) extends ContractedFailure with VerificationFailure {
+  override def code: String = "decreasesFailed"
+  override def position: String = apply.o.shortPosition
+  override def desc: String = Origin.messagesInContext(Seq(
+    apply.o -> "Loop may not terminate.",
+  ))
+  override def inlineDesc: String =
+    s"`${apply.o.inlineContext}` may not terminate"
 }
 case class ContextEverywhereFailedInPost(failure: ContractFailure, node: ContractApplicable[_]) extends ContractedFailure with WithContractFailure {
   override def baseCode: String = "contextPostFailed"
