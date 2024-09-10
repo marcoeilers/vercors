@@ -1141,7 +1141,10 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
       val test = TypeValue(convert(clz))
       OpenStaticInv(test)(blame(stat))
     }
-    case ValCloseInv(_, clz, _) => ??(stat)
+    case ValCloseInv(_, clz, _) => {
+      val test = TypeValue(convert(clz))
+      CloseStaticInv(test)(blame(stat))
+    }
     case ValAssert(_, assn, _) => Assert(convert(assn))(blame(stat))
     case ValAssume(_, assn, _) => Assume(convert(assn))
     case ValInhale(_, resource, _) => Inhale(convert(resource))

@@ -74,6 +74,20 @@ case object LangJavaToCol {
     override def inlineContext: String = cls.o.inlineContext
   }
 
+  case class JavaInitializedFunctionOrigin(cls: JavaClassOrInterface[_]) extends Origin {
+    override def preferredName: String = cls.name + "Initialized"
+    override def shortPosition: String = cls.o.shortPosition
+    override def context: String = cls.o.context
+    override def inlineContext: String = cls.o.inlineContext
+  }
+
+  case class JavaTokenPredicateOrigin(cls: JavaClassOrInterface[_]) extends Origin {
+    override def preferredName: String = cls.name + "TokenPredicate"
+    override def shortPosition: String = cls.o.shortPosition
+    override def context: String = cls.o.context
+    override def inlineContext: String = cls.o.inlineContext
+  }
+
   case class JavaInlineArrayInitializerOrigin(inner: Origin) extends Origin {
     override def preferredName: String = "arrayInitializer"
     override def shortPosition: String = inner.shortPosition
@@ -269,6 +283,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
             })).flatten))
             val sharedInitPreHead = SplitAccountedPredicate(left= staticFieldPerms, right = cons.contract.requires)
 
+            val staticLevelThing = sharedInitSpecsApplied.headOption.flatMap(_._2.contract.staticLevel)
             new Procedure(
               returnType = t,
               args = rw.variables.collect { cons.parameters.map(rw.dispatch) }._1,
@@ -286,6 +301,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
                   left = UnitAccountedPredicate((result !== Null()) && (TypeOf(result) === TypeValue(t))),
                   right = ensure,
                 ),
+                staticLevel = staticLevelThing.map(rw.dispatch),
                 signals = cons.contract.signals.map(rw.dispatch) ++
                   cons.signals.map(t => SignalsClause(new Variable(rw.dispatch(t)), tt)),
               ) },

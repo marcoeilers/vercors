@@ -8,6 +8,7 @@ import vct.col.ast.RewriteHelpers._
 import vct.col.origin.{AbstractApplicable, Origin, PanicBlame, TrueSatisfiable}
 import vct.col.ref.Ref
 import vct.col.rewrite.ConstantifyFinalFields.FinalFieldPerm
+import vct.col.rewrite.lang.LangJavaToCol.{JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaStaticsClassOrigin, JavaTokenPredicateOrigin}
 import vct.col.util.SuccessionMap
 import vct.result.VerificationError.UserError
 
@@ -27,11 +28,13 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
   var finalValueMap: Map[Declaration[Pre], Expr[Pre]] = Map()
   val fieldFunction: SuccessionMap[InstanceField[Pre], Function[Post]] = SuccessionMap()
 
-  var tokenPredMap: Map[Class[Pre], Predicate[Post]] = Map()
-  var initializedFunctionMap: Map[Class[Pre], Function[Post]] = Map()
-  var classInvs: Map[Class[Pre], Expr[Pre]] = Map()
-  var classLevels = Map[Class[Pre], Int]()
-  var declLevels = Map[Class[Pre], Map[Declaration[Pre], Int]]()
+  var tokenPredMap: Map[String, Predicate[Post]] = Map()
+  var initializedFunctionMap: Map[String, Function[Post]] = Map()
+  var classInvs: Map[String, Expr[Pre]] = Map()
+  var classLevels = Map[String, BigInt]()
+  var declLevels = Map[(String, String), BigInt]()
+  var currentDecl: Declaration[Pre] = null
+  var currentClassMarco: Class[Pre] = null
 
   def isFinal(field: InstanceField[Pre]): Boolean =
     field.flags.collectFirst { case _: Final[Pre] => () }.isDefined
@@ -62,11 +65,81 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         (field, value)
     }).toMap
 
+    decl.declarations.foreach{
+      case cls: Class[Pre] =>
+        val origin: JavaClassOrInterface[_] = cls.o match {
+          case jico: JavaInstanceClassOrigin => jico.cls
+          case jsco: JavaStaticsClassOrigin => jsco.cls
+        }
+        origin match {
+          case jc: JavaClass[Pre] =>
+            classLevels += jc.name -> (jc.staticLevel match {
+              case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+              case None => 0
+              case _ => throw new RuntimeException("Static level must be an integer.")
+            })
+
+            jc.staticInvariant match {
+              case Some(inv) =>
+                classInvs += jc.name -> inv
+              case None =>
+            }
+            implicit val o: Origin = jc.o
+            val initializedFunc =
+              function[Post](
+                blame = JavaInitializedFunctionOrigin(jc),
+                contractBlame = TrueSatisfiable,
+                returnType = TBool[Post](),
+                args = Seq(),
+              )
+
+            initializedFunctionMap += jc.name -> initializedFunc
+
+            val tokenPredicate = new Predicate[Post](Seq(), None, false, false)(JavaTokenPredicateOrigin(jc))
+            tokenPredMap += jc.name -> tokenPredicate
+
+            jc.decls.foreach(jd => jd match {
+              case jm: JavaMethod[_] =>
+                declLevels += (jc.name, jm.name) -> (jm.contract.staticLevel match {
+                  case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+                  case None => 0
+                  case _ => throw new RuntimeException("Static level must be an integer.")
+                })
+              case ji: JavaSharedInitialization[_] =>
+                declLevels += (jc.name, "static") -> (ji.contract.staticLevel match {
+                  case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+                  case None => 0
+                  case _ => throw new RuntimeException("Static level must be an integer.")
+                })
+              case c: JavaConstructor[_] =>
+                declLevels += (jc.name, "init") -> (c.contract.staticLevel match {
+                  case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+                  case None => 0
+                  case _ => throw new RuntimeException("Static level must be an integer.")
+                })
+              case _ =>
+            })
+          case _ =>
+        }
+      case _ =>
+    }
+
     super.dispatch(decl)
   }
 
   override def dispatch(decl: Declaration[Pre]): Unit = decl match {
-    case cls: Class[Pre] =>
+    case cls: Class[Pre] if cls.o.isInstanceOf[JavaStaticsClassOrigin] =>
+      val origin: JavaClassOrInterface[_] = cls.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      origin match {
+        case jc: JavaClass[Pre] => {
+          globalDeclarations.declare(initializedFunctionMap.get(jc.name).get)
+          globalDeclarations.declare(tokenPredMap.get(jc.name).get)
+        }
+        case _ =>
+      }
       currentClass.having(cls) { rewriteDefault(cls) }
     case field: InstanceField[Pre] =>
       implicit val o: Origin = field.o
@@ -86,7 +159,11 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       } else {
         rewriteDefault(field)
       }
-    case other => rewriteDefault(other)
+    case other =>
+      //TODO: This is definitely not the right way to do this, but it works for now.
+      if (other.isInstanceOf[AbstractMethod[_]] || other.isInstanceOf[JavaSharedInitialization[_]])
+        currentDecl = other
+      rewriteDefault(other)
   }
 
   override def dispatch(e: Expr[Pre]): Expr[Post] = e match {
@@ -94,6 +171,22 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       implicit val o: Origin = e.o
       if(isFinal(field)) FunctionInvocation[Post](fieldFunction.ref(field), Seq(dispatch(obj)), Nil, Nil, Nil)(PanicBlame("requires nothing"))
       else rewriteDefault(e)
+    case Initialized(cls) =>
+      implicit val o: Origin = e.o
+      val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
+      val jc = clsDecl.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      FunctionInvocation[Post](initializedFunctionMap.get(jc.name).get.ref, Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+    case Token(cls, prm) =>
+      implicit val o: Origin = e.o
+      val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
+      val jc = clsDecl.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, dispatch(prm))
     case other => rewriteDefault(other)
   }
 
@@ -111,6 +204,27 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
     case Eval(PreAssignExpression(Deref(obj, Ref(field)), value)) if isFinal(field) && finalValueMap.contains(field) => Block(Nil)(stat.o)
     case Assign(Deref(obj, Ref(field)), value) if isFinal(field) => makeInhale(obj, field, value)(stat.o)
     case Eval(PreAssignExpression(Deref(obj, Ref(field)), value)) if isFinal(field) => makeInhale(obj, field, value)(stat.o)
+    case OpenStaticInv(cls) =>
+      implicit val o: Origin = stat.o
+      val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
+      val jc = clsDecl.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, WritePerm())
+
+      val currentLevel = currentDecl.asInstanceOf[AbstractMethod[_]].contract.staticLevel match {
+        case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+        case None => BigInt(0)
+        case _ => throw new RuntimeException("Static level must be an integer.")
+      }
+      val clsLevel = jc.asInstanceOf[JavaClass[Pre]].staticLevel match {
+        case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+        case None => BigInt(0)
+        case _ => throw new RuntimeException("Static level must be an integer.")
+      }
+      val levelOkay = Less[Post](IntegerValue(currentLevel), IntegerValue(clsLevel))
+      Assert(foldStar(Seq(tokenPred, levelOkay)))(stat.o)
     case other => rewriteDefault(other)
   }
 }

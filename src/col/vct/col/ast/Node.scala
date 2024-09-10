@@ -182,6 +182,7 @@ final case class Lock[G](obj: Expr[G])(val blame: Blame[LockFailure])(implicit v
 final case class Unlock[G](obj: Expr[G])(val blame: Blame[UnlockFailure])(implicit val o: Origin) extends NormallyCompletingStatement[G] with UnlockImpl[G]
 final case class Commit[G](obj: Expr[G])(val blame: Blame[CommitFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with CommitImpl[G]
 final case class OpenStaticInv[G](clz: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with OpenStaticInvImpl[G]
+final case class CloseStaticInv[G](clz: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with CloseStaticInvImpl[G]
 final case class Fold[G](res: Expr[G])(val blame: Blame[FoldFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with FoldImpl[G]
 final case class Unfold[G](res: Expr[G])(val blame: Blame[UnfoldFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with UnfoldImpl[G]
 final case class WandApply[G](res: Expr[G])(val blame: Blame[WandApplyFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with WandApplyImpl[G]

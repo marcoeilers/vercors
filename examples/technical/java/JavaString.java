@@ -42,7 +42,6 @@ class JavaString {
       static_level 5;
     @*/
     public void g() {
-        while (true) {}
         assert myNumber == 0;
         "xuz";
         assert "abc" == "abc";
@@ -54,8 +53,8 @@ class JavaString {
         String s2 = "bbb";
         String s3 = s1 + s2;
 
-        // assert \initialized(Other);
-        // assert \token(Other, write);
+        //@ assert \initialized(Other);
+        //@ assert \token(Other, write);
 
         assert "".isEmpty() || !"".isEmpty();
 
@@ -66,6 +65,8 @@ class JavaString {
 
 
 class Other {
+
+    //@ static_level 456;
     static {
         //@ openInv JavaString;
         JavaString.myNumber = 55;
