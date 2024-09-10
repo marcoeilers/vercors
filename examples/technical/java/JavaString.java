@@ -25,7 +25,7 @@ class JavaString {
     @*/
     static {
         int i = 6;
-        //@ decreases i;
+        // decreases i;
         while (i > 0)
         {
             i--;
@@ -54,9 +54,20 @@ class JavaString {
         String s2 = "bbb";
         String s3 = s1 + s2;
 
+        // assert \initialized(Other);
+        // assert \token(Other, write);
+
         assert "".isEmpty() || !"".isEmpty();
 
         //assert CONST != CONST2;
     }
 
+}
+
+
+class Other {
+    static {
+        //@ openInv JavaString;
+        JavaString.myNumber = 55;
+    }
 }

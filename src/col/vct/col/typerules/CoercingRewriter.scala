@@ -576,6 +576,8 @@ abstract class CoercingRewriter[Pre <: Generation]() extends AbstractRewriter[Pr
     implicit val o: Origin = e.o
 
     e match {
+      case i@Initialized(_) => i
+      case t@Token(_, _) => t
       case ApplyCoercion(_, _) =>
         throw Unreachable("All instances of ApplyCoercion should be immediately rewritten by CoercingRewriter.dispatch.")
 
@@ -1345,6 +1347,7 @@ abstract class CoercingRewriter[Pre <: Generation]() extends AbstractRewriter[Pr
   def coerce(stat: Statement[Pre]): Statement[Pre] = {
     implicit val o: Origin = stat.o
     stat match {
+      case o @ OpenStaticInv(_) => o
       case a @ Assert(assn) => Assert(res(assn))(a.blame)
       case a @ Assign(target, value) =>
         try { Assign(target, coerce(value, target.t))(a.blame) } catch {

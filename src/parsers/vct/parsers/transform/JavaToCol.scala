@@ -1137,6 +1137,11 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
       Unfold(convert(predicate))(blame(stat))
     case ValOpen(_, _, _) => ??(stat)
     case ValClose(_, _, _) => ??(stat)
+    case ValOpenInv(_, clz, _) => {
+      val test = TypeValue(convert(clz))
+      OpenStaticInv(test)(blame(stat))
+    }
+    case ValCloseInv(_, clz, _) => ??(stat)
     case ValAssert(_, assn, _) => Assert(convert(assn))(blame(stat))
     case ValAssume(_, assn, _) => Assume(convert(assn))
     case ValInhale(_, resource, _) => Inhale(convert(resource))
@@ -1404,6 +1409,7 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
     case ValPointerBlockOffset(_, _, ptr, _) => PointerBlockOffset(convert(ptr))(blame(e))
     case ValPointerLength(_, _, ptr, _) => PointerLength(convert(ptr))(blame(e))
     case ValPolarityDependent(_, _, onInhale, _, onExhale, _) => PolarityDependent(convert(onInhale), convert(onExhale))
+    case ValToken(_, _, clz, _, perm, _) => vct.col.ast.Token(TypeValue(convert(clz)), convert(perm))
   }
 
   def convert(implicit v: ValBindingContext): (Variable[G], Seq[Expr[G]]) = v match {
@@ -1504,6 +1510,7 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
       val allIndices = convert(indices)
       NdPartialIndex(allIndices.init, allIndices.last, convert(dims))
     case ValNdLength(_, _, dims, _) => NdLength(convert(dims))
+    case ValInitialized(_, _, clz, _) => Initialized(TypeValue(convert(clz)))
   }
 
   def convert(implicit e: ValExprPairContext): (Expr[G], Expr[G]) = e match {

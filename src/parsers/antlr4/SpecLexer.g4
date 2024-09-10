@@ -85,6 +85,8 @@ VAL_FOLD: 'fold';
 VAL_UNFOLD: 'unfold';
 VAL_OPEN: 'open';
 VAL_CLOSE: 'close';
+VAL_OPEN_INV: 'openInv';
+VAL_CLOSE_INV: 'closeInv';
 VAL_ASSUME: 'assume';
 VAL_INHALE: 'inhale';
 VAL_EXHALE: 'exhale';
@@ -167,6 +169,8 @@ VAL_PARTIAL_INDEX: '\\nd_partial_index';
 POLARITY_DEPENDENT: '\\polarity_dependent';
 SMT_LIB: '\\smtlib';
 BOOGIE: '\\boogie';
+TOKEN: '\\token';
+INITIALIZED: '\\initialized';
 
 NONE: 'none';
 OPTION_NONE: 'None';

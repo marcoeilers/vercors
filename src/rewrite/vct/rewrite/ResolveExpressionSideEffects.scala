@@ -296,6 +296,7 @@ case class ResolveExpressionSideEffects[Pre <: Generation]() extends Rewriter[Pr
       case refute: Refute[Pre] => rewriteDefault(refute)
       case inhale: Inhale[Pre] => rewriteDefault(inhale)
       case Assume(expr) => frame(expr, Assume(_))
+      case osi @ OpenStaticInv(clz) => rewriteDefault(osi)
       case ignore: SpecIgnoreStart[Pre] => rewriteDefault(ignore)
       case ignore: SpecIgnoreEnd[Pre] => rewriteDefault(ignore)
       case t @ Throw(obj) => frame(obj, Throw(_)(t.blame))

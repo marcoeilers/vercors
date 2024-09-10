@@ -71,6 +71,8 @@ valStatement
  | 'unfold' langExpr ';' # valUnfold
  | 'open' langExpr ';' # valOpen
  | 'close' langExpr ';' # valClose
+ | 'openInv' langType ';' # valOpenInv
+ | 'closeInv' langType ';' # valCloseInv
  | 'assert' langExpr ';' # valAssert
  | 'assume' langExpr ';' # valAssume
  | 'inhale' langExpr ';' # valInhale
@@ -187,6 +189,7 @@ valPrimaryPermission
  | '\\pointer_block_offset' '(' langExpr ')' # valPointerBlockOffset
  | '\\pointer_length' '(' langExpr ')' # valPointerLength
  | '\\polarity_dependent' '(' langExpr ',' langExpr ')' # valPolarityDependent
+ | '\\token' '(' langType ',' langExpr ')' # valToken
  ;
 
 valForall: '\\forall' | '\u2200';
@@ -289,6 +292,7 @@ valPrimary
  | '\\nd_index' '(' langExpr ',' langExpr valExprPair* ')' # valNdIndex
  | '\\nd_partial_index' '(' valExpressionList ';' valExpressionList ')' # valNdLIndex
  | '\\nd_length' '(' valExpressionList ')' # ValNdLength
+ | '\\initialized' '(' langType ')' # valInitialized
  ;
 
 // Out spec: defined meaning: a language local

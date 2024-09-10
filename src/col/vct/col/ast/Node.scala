@@ -181,6 +181,7 @@ final case class Join[G](obj: Expr[G])(val blame: Blame[JoinFailure])(implicit v
 final case class Lock[G](obj: Expr[G])(val blame: Blame[LockFailure])(implicit val o: Origin) extends NormallyCompletingStatement[G] with LockImpl[G]
 final case class Unlock[G](obj: Expr[G])(val blame: Blame[UnlockFailure])(implicit val o: Origin) extends NormallyCompletingStatement[G] with UnlockImpl[G]
 final case class Commit[G](obj: Expr[G])(val blame: Blame[CommitFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with CommitImpl[G]
+final case class OpenStaticInv[G](clz: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with OpenStaticInvImpl[G]
 final case class Fold[G](res: Expr[G])(val blame: Blame[FoldFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with FoldImpl[G]
 final case class Unfold[G](res: Expr[G])(val blame: Blame[UnfoldFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with UnfoldImpl[G]
 final case class WandApply[G](res: Expr[G])(val blame: Blame[WandApplyFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with WandApplyImpl[G]
@@ -610,6 +611,10 @@ final case class SharedMemSize[G](pointer: Expr[G])(implicit val o: Origin) exte
 final case class NdIndex[G](indices: Seq[Expr[G]], dimensions: Seq[Expr[G]])(implicit val o: Origin) extends Expr[G] with NdIndexImpl[G]
 final case class NdPartialIndex[G](indices: Seq[Expr[G]], linearIndex: Expr[G], dimensions: Seq[Expr[G]])(implicit val o: Origin) extends Expr[G] with NdPartialIndexImpl[G]
 final case class NdLength[G](dimensions: Seq[Expr[G]])(implicit val o: Origin) extends Expr[G] with NdLengthImpl[G]
+
+final case class Initialized[G](clz: Expr[G])(implicit val o: Origin) extends Expr[G] with InitializedImpl[G]
+final case class Token[G](clz: Expr[G], prm: Expr[G])(implicit val o: Origin) extends Expr[G] with TokenImpl[G]
+
 
 final case class Cons[G](x: Expr[G], xs: Expr[G])(implicit val o: Origin) extends Expr[G] with ConsImpl[G]
 final case class Head[G](xs: Expr[G])(val blame: Blame[SeqBoundFailure])(implicit val o: Origin) extends Expr[G] with HeadImpl[G]

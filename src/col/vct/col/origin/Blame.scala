@@ -596,6 +596,12 @@ case class CommitFailed(node: Commit[_], failure: ContractFailure) extends Const
   override def inlineDescWithSource(node: String, failure: String): String = s"`$node` may not commit the defined resources to the lock invariant, since $failure."
 }
 
+case class OpenStaticInvFailed(node: OpenStaticInv[_], failure: ContractFailure) extends ConstructorFailure with WithContractFailure {
+  override def baseCode: String = "openStaticInvFailed"
+  override def descInContext: String = "Opening the static invariant may not be possible here, since"
+  override def inlineDescWithSource(node: String, failure: String): String = s"`$node` may not open the static invariant, since $failure."
+}
+
 case class NotifyFailed(node: Notify[_], failure: ContractFailure) extends WithContractFailure {
   override def baseCode: String = "heldFailed"
   override def descInContext: String = "The token that indicated the lock is locked (`held(obj)`) may not be asserted here, since"

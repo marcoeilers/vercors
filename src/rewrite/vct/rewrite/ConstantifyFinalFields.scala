@@ -27,6 +27,12 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
   var finalValueMap: Map[Declaration[Pre], Expr[Pre]] = Map()
   val fieldFunction: SuccessionMap[InstanceField[Pre], Function[Post]] = SuccessionMap()
 
+  var tokenPredMap: Map[Class[Pre], Predicate[Post]] = Map()
+  var initializedFunctionMap: Map[Class[Pre], Function[Post]] = Map()
+  var classInvs: Map[Class[Pre], Expr[Pre]] = Map()
+  var classLevels = Map[Class[Pre], Int]()
+  var declLevels = Map[Class[Pre], Map[Declaration[Pre], Int]]()
+
   def isFinal(field: InstanceField[Pre]): Boolean =
     field.flags.collectFirst { case _: Final[Pre] => () }.isDefined
 
