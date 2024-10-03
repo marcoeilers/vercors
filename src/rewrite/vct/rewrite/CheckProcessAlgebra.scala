@@ -77,7 +77,7 @@ case class CheckProcessAlgebra[Pre <: Generation]() extends Rewriter[Pre] with L
         new Class(
           classDeclarations.collect {
             model.declarations.foreach(dispatch(_))
-          }._1, Nil, tt,
+          }._1, Nil, tt, tt, tt
         )(model.o)
       }
       globalDeclarations.declare(newClass)

@@ -1234,7 +1234,7 @@ public class MainTransformer<T> {
 
         // Assemble class
         Class<T> main_class = new Class<>(List.from(CollectionConverters.asScala(declarations)), col_system.NO_CLS_REFS,
-                lock_invariant, OriGen.create("Main"));
+                lock_invariant, new BooleanValue(true, OriGen.create()), new BooleanValue(true, OriGen.create()), OriGen.create("Main"));
 
         // Register Main class in COL system context
         col_system.add_global_declaration(main_class);

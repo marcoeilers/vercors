@@ -147,7 +147,7 @@ case class EncodeBreakReturn[Pre <: Generation]() extends Rewriter[Pre] {
 
         case Break(Some(Ref(label))) =>
           val cls = breakLabelException.getOrElseUpdate(label,
-            globalDeclarations.declare(new Class[Post](Nil, Nil, tt)(BreakException)))
+            globalDeclarations.declare(new Class[Post](Nil, Nil, tt, tt, tt)(BreakException)))
 
           Throw(NewObject[Post](cls.ref))(PanicBlame("The result of NewObject is never null"))
 
@@ -173,7 +173,7 @@ case class EncodeBreakReturn[Pre <: Generation]() extends Rewriter[Pre] {
             if (needBreakReturnExceptions(body)) {
               implicit val o: Origin = body.o
               val returnField = new InstanceField[Post](dispatch(method.returnType), Set.empty)(ReturnField)
-              val returnClass = new Class[Post](Seq(returnField), Nil, tt)(ReturnClass)
+              val returnClass = new Class[Post](Seq(returnField), Nil, tt, tt, tt)(ReturnClass)
               globalDeclarations.declare(returnClass)
 
               val caughtReturn = new Variable[Post](TClass(returnClass.ref))

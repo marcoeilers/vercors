@@ -92,9 +92,10 @@ case class PVLToCol[G](override val originProvider: OriginProvider, override val
         new Class(
           declarations = decls.flatMap(convert(_)),
           supports = Nil,
-          intrinsicLockInvariant = AstBuildHelpers.foldStar(contract.consume(contract.lock_invariant)),
-        )(SourceNameOrigin(convert(name), origin(cls)))
-      })
+          intrinsicLockInvariant = AstBuildHelpers.foldStar(contract.consume(contract.lock_invariant))(SourceNameOrigin(convert(name), origin(cls))),
+          staticInv = AstBuildHelpers.foldStar(contract.consume(contract.static_invariant))(SourceNameOrigin(convert(name), origin(cls))),
+          dupStaticInv = AstBuildHelpers.foldStar(contract.consume(contract.dup_static_invariant))(SourceNameOrigin(convert(name), origin(cls)))
+        )})
   }
 
   def convert(implicit decl: ClassDeclContext): Seq[ClassDeclaration[G]] = decl match {

@@ -181,8 +181,10 @@ final case class Join[G](obj: Expr[G])(val blame: Blame[JoinFailure])(implicit v
 final case class Lock[G](obj: Expr[G])(val blame: Blame[LockFailure])(implicit val o: Origin) extends NormallyCompletingStatement[G] with LockImpl[G]
 final case class Unlock[G](obj: Expr[G])(val blame: Blame[UnlockFailure])(implicit val o: Origin) extends NormallyCompletingStatement[G] with UnlockImpl[G]
 final case class Commit[G](obj: Expr[G])(val blame: Blame[CommitFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with CommitImpl[G]
-final case class OpenStaticInv[G](clz: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with OpenStaticInvImpl[G]
-final case class CloseStaticInv[G](clz: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with CloseStaticInvImpl[G]
+final case class OpenStaticInv[G](clz: Expr[G], amt: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with OpenStaticInvImpl[G]
+final case class CloseStaticInv[G](clz: Expr[G], amt: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with CloseStaticInvImpl[G]
+final case class OpenDupStaticInv[G](clz: Expr[G])(val blame: Blame[OpenStaticInvFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with OpenDupStaticInvImpl[G]
+
 final case class Fold[G](res: Expr[G])(val blame: Blame[FoldFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with FoldImpl[G]
 final case class Unfold[G](res: Expr[G])(val blame: Blame[UnfoldFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with UnfoldImpl[G]
 final case class WandApply[G](res: Expr[G])(val blame: Blame[WandApplyFailed])(implicit val o: Origin) extends NormallyCompletingStatement[G] with WandApplyImpl[G]
@@ -222,7 +224,7 @@ sealed trait Declaration[G] extends Node[G] with DeclarationImpl[G]
 sealed trait GlobalDeclaration[G] extends Declaration[G] with GlobalDeclarationImpl[G]
 final class SimplificationRule[G](val axiom: Expr[G])(implicit val o: Origin) extends GlobalDeclaration[G] with SimplificationRuleImpl[G]
 final class AxiomaticDataType[G](val decls: Seq[ADTDeclaration[G]], val typeArgs: Seq[Variable[G]])(implicit val o: Origin) extends GlobalDeclaration[G] with AxiomaticDataTypeImpl[G]
-final class Class[G](val declarations: Seq[ClassDeclaration[G]], val supports: Seq[Ref[G, Class[G]]], val intrinsicLockInvariant: Expr[G])(implicit val o: Origin) extends GlobalDeclaration[G] with ClassImpl[G]
+final class Class[G](val declarations: Seq[ClassDeclaration[G]], val supports: Seq[Ref[G, Class[G]]], val intrinsicLockInvariant: Expr[G], val staticInv: Expr[G], val dupStaticInv: Expr[G])(implicit val o: Origin) extends GlobalDeclaration[G] with ClassImpl[G]
 final class VeyMontSeqProg[G](val contract: ApplicableContract[G], val progArgs : Seq[Variable[G]], val threads: Seq[VeyMontThread[G]], val runMethod: ClassDeclaration[G], val methods: Seq[ClassDeclaration[G]])(implicit val o: Origin) extends GlobalDeclaration[G] with VeyMontSeqProgImpl[G]
 final class VeyMontThread[G](val threadType: Type[G], val args: Seq[Expr[G]])(implicit val o: Origin) extends Declaration[G] with VeyMontThreadImpl[G]
 final class Model[G](val declarations: Seq[ModelDeclaration[G]])(implicit val o: Origin) extends GlobalDeclaration[G] with Declarator[G] with ModelImpl[G]
@@ -614,6 +616,7 @@ final case class NdPartialIndex[G](indices: Seq[Expr[G]], linearIndex: Expr[G], 
 final case class NdLength[G](dimensions: Seq[Expr[G]])(implicit val o: Origin) extends Expr[G] with NdLengthImpl[G]
 
 final case class Initialized[G](clz: Expr[G])(implicit val o: Origin) extends Expr[G] with InitializedImpl[G]
+final case class OnInit[G](clz: Expr[G], ass: Expr[G])(implicit val o: Origin) extends Expr[G] with OnInitImpl[G]
 final case class Token[G](clz: Expr[G], prm: Expr[G])(implicit val o: Origin) extends Expr[G] with TokenImpl[G]
 
 
@@ -849,7 +852,7 @@ sealed trait JavaGlobalDeclaration[G] extends GlobalDeclaration[G] with JavaGlob
 final class JavaNamespace[G](val pkg: Option[JavaName[G]], val imports: Seq[JavaImport[G]], val declarations: Seq[GlobalDeclaration[G]])(implicit val o: Origin) extends JavaGlobalDeclaration[G] with Declarator[G] with JavaNamespaceImpl[G]
 
 sealed trait JavaClassOrInterface[G] extends JavaGlobalDeclaration[G] with Declarator[G] with JavaClassOrInterfaceImpl[G]
-final class JavaClass[G](val name: String, val modifiers: Seq[JavaModifier[G]], val typeParams: Seq[Variable[G]], val intrinsicLockInvariant: Expr[G], val staticInvariant: Option[Expr[G]], val staticLevel: Option[DecreasesClause[G]], val ext: Type[G], val imp: Seq[Type[G]], val decls: Seq[ClassDeclaration[G]])(implicit val o: Origin) extends JavaClassOrInterface[G] with JavaClassImpl[G]
+final class JavaClass[G](val name: String, val modifiers: Seq[JavaModifier[G]], val typeParams: Seq[Variable[G]], val intrinsicLockInvariant: Expr[G], val staticInvariant: Option[Expr[G]], val dupStaticInvariant: Option[Expr[G]], val staticLevel: Option[DecreasesClause[G]], val ext: Type[G], val imp: Seq[Type[G]], val decls: Seq[ClassDeclaration[G]])(implicit val o: Origin) extends JavaClassOrInterface[G] with JavaClassImpl[G]
 final class JavaInterface[G](val name: String, val modifiers: Seq[JavaModifier[G]], val typeParams: Seq[Variable[G]], val ext: Seq[Type[G]], val decls: Seq[ClassDeclaration[G]])(implicit val o: Origin) extends JavaClassOrInterface[G] with JavaInterfaceImpl[G]
 final class JavaAnnotationInterface[G](val name: String, val modifiers: Seq[JavaModifier[G]], val ext: Type[G], val decls: Seq[ClassDeclaration[G]])(implicit val o: Origin) extends JavaClassOrInterface[G] with JavaAnnotationInterfaceImpl[G]
 

@@ -203,6 +203,14 @@ case class ClassToRef[Pre <: Generation]() extends Rewriter[Pre] {
         SilverNewRef[Post](succ(v), cls.declarations.collect { case field: InstanceField[Pre] => fieldSucc.ref(field) }),
         Inhale(FunctionInvocation[Post](typeOf.ref(()), Seq(Local(succ(v))), Nil, Nil, Nil)(PanicBlame("typeOf requires nothing.")) === const(typeNumber(cls))),
       ))
+    case Assign(Local(Ref(v)), FunctionInvocation(Ref(fnc), Seq(umm, NewObject(Ref(cls))), tArgs, gm, y)) =>
+      implicit val o: Origin = stat.o
+      val res = Block(Seq(
+        SilverNewRef[Post](succ(v), cls.declarations.collect { case field: InstanceField[Pre] => fieldSucc.ref(field) }),
+        Inhale(dispatch(umm)),
+        Inhale(FunctionInvocation[Post](typeOf.ref(()), Seq(Local(succ(v))), Nil, Nil, Nil)(PanicBlame("typeOf requires nothing.")) === const(typeNumber(cls))),
+      ))
+      res
     case inv @ InvokeMethod(obj, Ref(method), args, outArgs, typeArgs, givenMap, yields) =>
       InvokeProcedure[Post](
         ref = methodSucc.ref(method),

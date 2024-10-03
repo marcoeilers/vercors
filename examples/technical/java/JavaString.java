@@ -1,15 +1,19 @@
 /*@
   static_level 2;
   static_invariant Perm(myNumber, write);
-  static_invariant myNumber >= 33;
+  static_invariant JavaString.myNumber >= 33;
+  dup_static_invariant Perm(myNumber, write);
 @*/
 class JavaString {
     public static final String CONST = "my constant string";
     public static final String CONST2 = "my constant string";
 
     static int myNumber = 0;
+    static int hurgh = 0;
 
     public int intNumber = 0;
+    public int lck = 0;
+    public static int invonly = 0;
 
 
     /*@
@@ -30,7 +34,7 @@ class JavaString {
         {
             i--;
         }
-        //nonTerm();
+        nonTerm();
         myNumber = 42;
     }
 
@@ -38,10 +42,15 @@ class JavaString {
 
     /*@
       requires Perm(myNumber,write);
+      requires Perm(hurgh, write);
       requires myNumber == 0;
+      requires \onInit(JavaString)(Perm(myNumber,write));
       static_level 5;
     @*/
     public void g() {
+        JavaString js = new JavaString(5);
+
+
         assert myNumber == 0;
         "xuz";
         assert "abc" == "abc";
@@ -68,7 +77,10 @@ class Other {
 
     //@ static_level 456;
     static {
-        //@ openInv JavaString;
+        //@ openDupInv JavaString;
+        //@ openInv JavaString write;
         JavaString.myNumber = 55;
+        //@ closeInv JavaString write;
+        //JavaString.myNumber = 55;
     }
 }

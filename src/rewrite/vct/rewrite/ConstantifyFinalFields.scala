@@ -6,11 +6,13 @@ import vct.col.rewrite.{Generation, Rewriter, RewriterBuilder}
 import vct.col.util.AstBuildHelpers._
 import vct.col.ast.RewriteHelpers._
 import vct.col.origin.{AbstractApplicable, Origin, PanicBlame, TrueSatisfiable}
-import vct.col.ref.Ref
+import vct.col.ref.{DirectRef, LazyRef, Ref}
 import vct.col.rewrite.ConstantifyFinalFields.FinalFieldPerm
-import vct.col.rewrite.lang.LangJavaToCol.{JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaStaticsClassOrigin, JavaTokenPredicateOrigin}
+import vct.col.rewrite.lang.LangJavaToCol.{JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaMethodOrigin, JavaStaticsClassOrigin, JavaTokenPredicateOrigin}
 import vct.col.util.SuccessionMap
 import vct.result.VerificationError.UserError
+
+import scala.collection.mutable
 
 case object ConstantifyFinalFields extends RewriterBuilder {
   override def key: String = "constantFinalFields"
@@ -29,12 +31,13 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
   val fieldFunction: SuccessionMap[InstanceField[Pre], Function[Post]] = SuccessionMap()
 
   var tokenPredMap: Map[String, Predicate[Post]] = Map()
-  var initializedFunctionMap: Map[String, Function[Post]] = Map()
+  var initializedFunctionMap: SuccessionMap[String, Function[Post]] = SuccessionMap()
   var classInvs: Map[String, Expr[Pre]] = Map()
   var classLevels = Map[String, BigInt]()
   var declLevels = Map[(String, String), BigInt]()
   var currentDecl: Declaration[Pre] = null
   var currentClassMarco: Class[Pre] = null
+  var onceStuff : mutable.Map[String, Function[Post]] = mutable.Map()
 
   def isFinal(field: InstanceField[Pre]): Boolean =
     field.flags.collectFirst { case _: Final[Pre] => () }.isDefined
@@ -84,7 +87,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
                 classInvs += jc.name -> inv
               case None =>
             }
-            implicit val o: Origin = jc.o
+            implicit val o: Origin = cls.o
             val initializedFunc =
               function[Post](
                 blame = JavaInitializedFunctionOrigin(jc),
@@ -93,7 +96,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
                 args = Seq(),
               )
 
-            initializedFunctionMap += jc.name -> initializedFunc
+            initializedFunctionMap(jc.name) = initializedFunc
 
             val tokenPredicate = new Predicate[Post](Seq(), None, false, false)(JavaTokenPredicateOrigin(jc))
             tokenPredMap += jc.name -> tokenPredicate
@@ -127,43 +130,89 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
     super.dispatch(decl)
   }
 
-  override def dispatch(decl: Declaration[Pre]): Unit = decl match {
-    case cls: Class[Pre] if cls.o.isInstanceOf[JavaStaticsClassOrigin] =>
-      val origin: JavaClassOrInterface[_] = cls.o match {
-        case jico: JavaInstanceClassOrigin => jico.cls
-        case jsco: JavaStaticsClassOrigin => jsco.cls
-      }
-      origin match {
-        case jc: JavaClass[Pre] => {
-          globalDeclarations.declare(initializedFunctionMap.get(jc.name).get)
-          globalDeclarations.declare(tokenPredMap.get(jc.name).get)
+  override def dispatch(decl: Declaration[Pre]): Unit = {
+    onceStuff.getOrElseUpdate("assuming", {
+      implicit val o: Origin = decl.o
+      val assumingPreVar = new Variable[Post](TBool[Post]())
+      val assumingResTVar = new Variable[Post](TType[Post](TAny()))
+      val assumingResVar = new Variable[Post](TVar[Post](assumingResTVar.ref))
+      val assumingFunc = withResult((r: Result[Post]) =>
+        function[Post](
+          blame = PanicBlame("!!!!"),
+          contractBlame = TrueSatisfiable,
+          returnType = TVar[Post](assumingResTVar.ref),
+          args = Seq(assumingPreVar, assumingResVar),
+          typeArgs = Seq(assumingResTVar),
+          ensures = SplitAccountedPredicate(UnitAccountedPredicate[Post](Local(new DirectRef[Post, Variable[Post]](assumingPreVar))), UnitAccountedPredicate[Post](Local(new DirectRef[Post, Variable[Post]](assumingResVar)) === r))
+        ))
+      globalDeclarations.declare(assumingFunc)
+    })
+
+    onceStuff.getOrElseUpdate("asserting", {
+      implicit val o: Origin = decl.o
+      val assertingPreVar = new Variable[Post](TBool[Post]())
+      val assertingResTVar = new Variable[Post](TType[Post](TAny()))
+      val assertingResVar = new Variable[Post](TVar[Post](assertingResTVar.ref))
+      val assertingFunc = withResult((r: Result[Post]) =>
+        function[Post](
+          blame = PanicBlame("!!!!"),
+          contractBlame = TrueSatisfiable,
+          returnType = TVar(assertingResTVar.ref),
+          args = Seq(assertingPreVar, assertingResVar),
+          typeArgs = Seq(assertingResTVar),
+          requires = UnitAccountedPredicate(Local(new DirectRef(assertingPreVar))),
+          ensures = UnitAccountedPredicate(Local(new DirectRef[Post, Variable[Post]](assertingResVar)) === r)
+        ))
+      globalDeclarations.declare(assertingFunc)
+    })
+    decl match {
+      case cls: Class[Pre] if !cls.o.isInstanceOf[JavaStaticsClassOrigin] =>
+        val origin: JavaClassOrInterface[_] = cls.o match {
+          case jico: JavaInstanceClassOrigin => jico.cls
+          case jsco: JavaStaticsClassOrigin => jsco.cls
         }
-        case _ =>
-      }
-      currentClass.having(cls) { rewriteDefault(cls) }
-    case field: InstanceField[Pre] =>
-      implicit val o: Origin = field.o
-      if(isFinal(field)) {
-        fieldFunction(field) = globalDeclarations.declare(
-          withResult((result: Result[Post]) => function[Post](
-            blame = AbstractApplicable,
-            contractBlame = TrueSatisfiable,
-            returnType = dispatch(field.t),
-            args = Seq(new Variable[Post](TClass(succ(currentClass.top)))),
-            ensures = UnitAccountedPredicate(finalValueMap.get(field) match {
-              case Some(value) => result === rewriteDefault(value)
-              case None => tt[Post]
-            })
-          ))
-        )
-      } else {
-        rewriteDefault(field)
-      }
-    case other =>
-      //TODO: This is definitely not the right way to do this, but it works for now.
-      if (other.isInstanceOf[AbstractMethod[_]] || other.isInstanceOf[JavaSharedInitialization[_]])
-        currentDecl = other
-      rewriteDefault(other)
+        origin match {
+          case jc: JavaClass[Pre] => {
+            globalDeclarations.declare(initializedFunctionMap.get(jc.name).get)
+            globalDeclarations.declare(tokenPredMap.get(jc.name).get)
+          }
+          case _ =>
+        }
+      case _ =>
+    }
+    decl match {
+      case cls: Class[Pre] if cls.o.isInstanceOf[JavaStaticsClassOrigin] =>
+
+        val origin: JavaClassOrInterface[_] = cls.o match {
+          case jico: JavaInstanceClassOrigin => jico.cls
+          case jsco: JavaStaticsClassOrigin => jsco.cls
+        }
+
+        currentClass.having(cls) { rewriteDefault(cls) }
+      case field: InstanceField[Pre] =>
+        implicit val o: Origin = field.o
+        if(isFinal(field)) {
+          fieldFunction(field) = globalDeclarations.declare(
+            withResult((result: Result[Post]) => function[Post](
+              blame = AbstractApplicable,
+              contractBlame = TrueSatisfiable,
+              returnType = dispatch(field.t),
+              args = Seq(new Variable[Post](TClass(succ(currentClass.top)))),
+              ensures = UnitAccountedPredicate(finalValueMap.get(field) match {
+                case Some(value) => result === rewriteDefault(value)
+                case None => tt[Post]
+              })
+            ))
+          )
+        } else {
+          rewriteDefault(field)
+        }
+      case other =>
+        //TODO: This is definitely not the right way to do this, but it works for now.
+        if (other.isInstanceOf[AbstractMethod[_]] || other.isInstanceOf[JavaSharedInitialization[_]])
+          currentDecl = other
+        rewriteDefault(other)
+    }
   }
 
   override def dispatch(e: Expr[Pre]): Expr[Post] = e match {
@@ -178,7 +227,16 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         case jico: JavaInstanceClassOrigin => jico.cls
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
-      FunctionInvocation[Post](initializedFunctionMap.get(jc.name).get.ref, Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+      FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+    case OnInit(cls, ass) =>
+      implicit val o: Origin = e.o
+      val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
+      val jc = clsDecl.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      val fi = FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+      Implies[Post](fi, dispatch(ass))
     case Token(cls, prm) =>
       implicit val o: Origin = e.o
       val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
@@ -187,6 +245,34 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
       PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, dispatch(prm))
+    case i: Invocation[_] if i.ref.decl.o.isInstanceOf[JavaMethodOrigin] && !i.ref.decl.o.asInstanceOf[JavaMethodOrigin].method.o.toString.contains("vercors/res/universal/res/jdk/java") =>
+
+      val ip = rewriteDefault(i)
+
+
+//      val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
+//      val jc = clsDecl.o match {
+//        case jico: JavaInstanceClassOrigin => jico.cls
+//        case jsco: JavaStaticsClassOrigin => jsco.cls
+//      }
+//      va. initialized = FunctionInvocation[Post](initializedFunctionMap.get(jc.name).get.ref, Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+//
+//
+//      FunctionInvocation(onceStuff.get("assuming").get.ref, Seq(initialized, ip), Nil, Nil, Nil)
+      ip
+    case jnc: JavaNewClass[_] =>
+      rewriteDefault(jnc)
+    case no: NewObject[Pre] =>
+      implicit val o: Origin = e.o
+      val clsDecl = no.cls.decl
+      val jc = clsDecl.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+
+      val nop: Expr[Post] = rewriteDefault(no)
+      FunctionInvocation(onceStuff.get("assuming").get.ref.asInstanceOf[Ref[Post, Function[Post]]], Seq(initialized, nop), Seq(nop.t), Nil, Nil)(PanicBlame("requires nothing"))
     case other => rewriteDefault(other)
   }
 
@@ -204,14 +290,23 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
     case Eval(PreAssignExpression(Deref(obj, Ref(field)), value)) if isFinal(field) && finalValueMap.contains(field) => Block(Nil)(stat.o)
     case Assign(Deref(obj, Ref(field)), value) if isFinal(field) => makeInhale(obj, field, value)(stat.o)
     case Eval(PreAssignExpression(Deref(obj, Ref(field)), value)) if isFinal(field) => makeInhale(obj, field, value)(stat.o)
-    case OpenStaticInv(cls) =>
+    case CloseStaticInv(cls, amt) =>
       implicit val o: Origin = stat.o
       val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
       val jc = clsDecl.o match {
         case jico: JavaInstanceClassOrigin => jico.cls
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
-      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, WritePerm())
+      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, dispatch(amt))
+      Inhale(tokenPred)(stat.o)
+    case OpenStaticInv(cls, amt) =>
+      implicit val o: Origin = stat.o
+      val clsDecl = cls.asInstanceOf[TypeValue[Pre]].value.asInstanceOf[TClass[Pre]].cls.decl
+      val jc = clsDecl.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, dispatch(amt))
 
       val currentLevel = currentDecl.asInstanceOf[AbstractMethod[_]].contract.staticLevel match {
         case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
@@ -224,7 +319,17 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         case _ => throw new RuntimeException("Static level must be an integer.")
       }
       val levelOkay = Less[Post](IntegerValue(currentLevel), IntegerValue(clsLevel))
-      Assert(foldStar(Seq(tokenPred, levelOkay)))(stat.o)
+      val ex = Exhale(foldStar(Seq(tokenPred, levelOkay)))(stat.o)
+      val in = Inhale(dispatch(clsDecl.staticInv))(stat.o)
+      Block(Seq(ex, in))(stat.o)
+    case OpenDupStaticInv(cls) =>
+      implicit val o: Origin = stat.o
+      val clsDecl = cls.asInstanceOf[TypeValue[Pre]].value.asInstanceOf[TClass[Pre]].cls.decl
+      val jc = clsDecl.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls
+        case jsco: JavaStaticsClassOrigin => jsco.cls
+      }
+      Inhale[Post](dispatch(clsDecl.dupStaticInv))(stat.o)
     case other => rewriteDefault(other)
   }
 }

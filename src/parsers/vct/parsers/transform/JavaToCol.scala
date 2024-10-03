@@ -37,9 +37,11 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
     case TypeDeclaration0(mods, ClassDeclaration0(contract, _, name, args, ext, imp, ClassBody0(_, decls, _))) =>
       withContract(contract, contract => {
         val staticInvConsumed = contract.consume(contract.static_invariant)
+        val dupStaticInvConsumed = contract.consume(contract.dup_static_invariant)
         Seq(new JavaClass(convert(name), mods.map(convert(_)), args.map(convert(_)).getOrElse(Nil),
           AstBuildHelpers.foldStar(contract.consume(contract.lock_invariant)),
           if (staticInvConsumed.isEmpty) None else Some(AstBuildHelpers.foldStar(staticInvConsumed)),
+          if (dupStaticInvConsumed.isEmpty) None else Some(AstBuildHelpers.foldStar(dupStaticInvConsumed)),
           contract.consume(contract.static_level).headOption,
           ext.map(convert(_)).getOrElse(Java.JAVA_LANG_OBJECT),
           imp.map(convert(_)).getOrElse(Nil), decls.flatMap(convert(_))))
@@ -970,6 +972,8 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
       collector.static_invariant += ((contract, convert(exp)))
     case ValContractClause14(_, exp, _) =>
       collector.static_level += ((contract, convert(exp)))
+    case ValContractClause15(_, exp, _) =>
+      collector.dup_static_invariant += ((contract, convert(exp)))
   }
 
   def convert(implicit clause: ValDecreasesMeasureContext): DecreasesClause[G] = clause match {
@@ -1137,13 +1141,17 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
       Unfold(convert(predicate))(blame(stat))
     case ValOpen(_, _, _) => ??(stat)
     case ValClose(_, _, _) => ??(stat)
-    case ValOpenInv(_, clz, _) => {
+    case ValOpenInv(_, clz, amt, _) => {
       val test = TypeValue(convert(clz))
-      OpenStaticInv(test)(blame(stat))
+      OpenStaticInv(test, convert(amt))(blame(stat))
     }
-    case ValCloseInv(_, clz, _) => {
+    case ValOpenDupInv(_, clz, _) => {
       val test = TypeValue(convert(clz))
-      CloseStaticInv(test)(blame(stat))
+      OpenDupStaticInv(test)(blame(stat))
+    }
+    case ValCloseInv(_, clz, amt, _) => {
+      val test = TypeValue(convert(clz))
+      CloseStaticInv(test, convert(amt))(blame(stat))
     }
     case ValAssert(_, assn, _) => Assert(convert(assn))(blame(stat))
     case ValAssume(_, assn, _) => Assume(convert(assn))
@@ -1514,6 +1522,7 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
       NdPartialIndex(allIndices.init, allIndices.last, convert(dims))
     case ValNdLength(_, _, dims, _) => NdLength(convert(dims))
     case ValInitialized(_, _, clz, _) => Initialized(TypeValue(convert(clz)))
+    case ValOnInit(_, _, clz, _, _, ass, _) => OnInit(TypeValue(convert(clz)), convert(ass))
   }
 
   def convert(implicit e: ValExprPairContext): (Expr[G], Expr[G]) = e match {

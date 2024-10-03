@@ -387,6 +387,16 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
         case _: JavaAnnotationInterface[Pre] => tt[Pre]
       }
 
+      val staticInv = cls match {
+        case clazz: JavaClass[Pre] => clazz.staticInvariant.getOrElse(tt[Pre])
+        case _ => tt[Pre]
+      }
+
+      val dupStaticInv = cls match {
+        case clazz: JavaClass[Pre] => clazz.dupStaticInvariant.getOrElse(tt[Pre])
+        case _ => tt[Pre]
+      }
+
       val instanceClass = rw.currentThis.having(ThisObject(javaInstanceClassSuccessor.ref(cls))) {
         new Class[Post](rw.classDeclarations.collect {
           makeJavaClass(cls.name, instDecls, javaInstanceClassSuccessor.ref(cls), isStaticPart = false)
@@ -402,7 +412,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
               rw.bip.generateComponent(cls, inputConstructorRefs ++ syntheticConstructorRefs)
             case _ =>
           }
-        }._1, supports, rw.dispatch(lockInvariant))(JavaInstanceClassOrigin(cls))
+        }._1, supports, rw.dispatch(lockInvariant), rw.dispatch(staticInv), rw.dispatch(dupStaticInv))(JavaInstanceClassOrigin(cls))
       }
 
       rw.globalDeclarations.declare(instanceClass)
@@ -413,7 +423,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
           rw.currentThis.having(ThisObject(javaStaticsClassSuccessor.ref(cls))) {
             makeJavaClass(cls.name + "Statics", staticDecls, javaStaticsClassSuccessor.ref(cls), isStaticPart = true, Some(cls))
           }
-        }._1, Nil, tt)(JavaStaticsClassOrigin(cls))
+        }._1, Nil, tt, tt, tt)(JavaStaticsClassOrigin(cls))
 
         rw.globalDeclarations.declare(staticsClass)
         val t = TClass[Post](staticsClass.ref)

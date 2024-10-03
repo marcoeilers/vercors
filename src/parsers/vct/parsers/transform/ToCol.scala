@@ -26,6 +26,7 @@ abstract class ToCol[G](val originProvider: OriginProvider, val blameProvider: B
     val kernel_invariant: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
     val lock_invariant: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
     val static_invariant: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
+    val dup_static_invariant: mutable.ArrayBuffer[(ParserRuleContext, Expr[G1])] = mutable.ArrayBuffer()
     val static_level: mutable.ArrayBuffer[(ParserRuleContext, DecreasesClause[G1])] = mutable.ArrayBuffer()
 
     val given: mutable.ArrayBuffer[(ParserRuleContext, Variable[G1])] = mutable.ArrayBuffer()

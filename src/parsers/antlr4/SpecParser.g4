@@ -53,6 +53,7 @@ valContractClause
  | 'decreases' valDecreasesMeasure? ';'
  | 'static_invariant' langExpr ';'
  | 'static_level' valDecreasesMeasure ';'
+ | 'dup_static_invariant' langExpr ';'
  ;
 
 valDecreasesMeasure
@@ -71,8 +72,9 @@ valStatement
  | 'unfold' langExpr ';' # valUnfold
  | 'open' langExpr ';' # valOpen
  | 'close' langExpr ';' # valClose
- | 'openInv' langType ';' # valOpenInv
- | 'closeInv' langType ';' # valCloseInv
+ | 'openInv' langType langExpr ';' # valOpenInv
+ | 'closeInv' langType langExpr ';' # valCloseInv
+ | 'openDupInv' langType ';' # valOpenDupInv
  | 'assert' langExpr ';' # valAssert
  | 'assume' langExpr ';' # valAssume
  | 'inhale' langExpr ';' # valInhale
@@ -293,6 +295,7 @@ valPrimary
  | '\\nd_partial_index' '(' valExpressionList ';' valExpressionList ')' # valNdLIndex
  | '\\nd_length' '(' valExpressionList ')' # ValNdLength
  | '\\initialized' '(' langType ')' # valInitialized
+ | '\\onInit' '(' langType ')' '(' langExpr ')' # valOnInit
  ;
 
 // Out spec: defined meaning: a language local

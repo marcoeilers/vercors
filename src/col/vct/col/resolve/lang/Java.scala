@@ -198,6 +198,7 @@ case object Java extends LazyLogging {
         typeParams = Nil,
         intrinsicLockInvariant = `tt`,
         staticInvariant = None,
+        dupStaticInvariant = None,
         staticLevel = None,
         ext = Option(cls.getSuperclass).map(cls => lazyType(cls.getName.split('.').toIndexedSeq, ctx)).getOrElse(JAVA_LANG_OBJECT),
         imp = cls.getInterfaces.toIndexedSeq.map(cls => lazyType(cls.getName.split('.').toIndexedSeq, ctx)),
