@@ -292,13 +292,18 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
     case Eval(PreAssignExpression(Deref(obj, Ref(field)), value)) if isFinal(field) => makeInhale(obj, field, value)(stat.o)
     case CloseStaticInv(cls, amt) =>
       implicit val o: Origin = stat.o
-      val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
+      val clsDecl = cls.asInstanceOf[TypeValue[Pre]].value.asInstanceOf[TClass[Pre]].cls.decl
       val jc = clsDecl.o match {
         case jico: JavaInstanceClassOrigin => jico.cls
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
-      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, dispatch(amt))
-      Inhale(tokenPred)(stat.o)
+      val amtPost = dispatch(amt)
+      val inv = dispatch(clsDecl.staticInv)
+      val invMult = Scale(amtPost, inv)(PanicBlame(""))
+      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, amtPost)
+      val in = Inhale(tokenPred)(stat.o)
+      val ex = Exhale(invMult)(stat.o)
+      Block(Seq(ex, in))(stat.o)
     case OpenStaticInv(cls, amt) =>
       implicit val o: Origin = stat.o
       val clsDecl = cls.asInstanceOf[TypeValue[Pre]].value.asInstanceOf[TClass[Pre]].cls.decl
@@ -306,7 +311,8 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         case jico: JavaInstanceClassOrigin => jico.cls
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
-      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, dispatch(amt))
+      val amtPost = dispatch(amt)
+      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, amtPost)
 
       val currentLevel = currentDecl.asInstanceOf[AbstractMethod[_]].contract.staticLevel match {
         case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
@@ -320,7 +326,9 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       }
       val levelOkay = Less[Post](IntegerValue(currentLevel), IntegerValue(clsLevel))
       val ex = Exhale(foldStar(Seq(tokenPred, levelOkay)))(stat.o)
-      val in = Inhale(dispatch(clsDecl.staticInv))(stat.o)
+      val inv = dispatch(clsDecl.staticInv)
+      val invMult = Scale(amtPost, inv)(PanicBlame(""))
+      val in = Inhale(invMult)(stat.o)
       Block(Seq(ex, in))(stat.o)
     case OpenDupStaticInv(cls) =>
       implicit val o: Origin = stat.o
@@ -329,7 +337,10 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         case jico: JavaInstanceClassOrigin => jico.cls
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
-      Inhale[Post](dispatch(clsDecl.dupStaticInv))(stat.o)
+      val newVar = new Variable[Post](TRational[Post]()())
+      val newVarPos = Less(NoPerm(), newVar.get)
+      val scaledInv = Scale(newVar.get, dispatch(clsDecl.dupStaticInv))(PanicBlame(""))
+      Scope(Seq(newVar), Inhale[Post](foldStar(Seq(newVarPos, scaledInv)))(stat.o))(stat.o)
     case other => rewriteDefault(other)
   }
 }
