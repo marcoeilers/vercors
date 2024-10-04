@@ -8,7 +8,7 @@ import vct.col.ast.RewriteHelpers._
 import vct.col.origin.{AbstractApplicable, Origin, PanicBlame, TrueSatisfiable}
 import vct.col.ref.{DirectRef, LazyRef, Ref}
 import vct.col.rewrite.ConstantifyFinalFields.FinalFieldPerm
-import vct.col.rewrite.lang.LangJavaToCol.{JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaMethodOrigin, JavaStaticsClassOrigin, JavaTokenPredicateOrigin}
+import vct.col.rewrite.lang.LangJavaToCol.{JavaConstructorOrigin, JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaMethodOrigin, JavaStaticsClassOrigin, JavaTokenPredicateOrigin}
 import vct.col.util.SuccessionMap
 import vct.result.VerificationError.UserError
 
@@ -213,13 +213,26 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         classDeclarations.succeed(jsi, newOne)
       case im: InstanceMethod[Pre] =>
         currentDecl = im
+        implicit val o: Origin = im.o
         val newOne = labelDecls.scope {
           val currentLevelVar = new Variable[Post](TInt[Post]())(im.o)
+          val initLevel = im.o match {
+            case JavaConstructorOrigin(cons) => cons.contract.staticLevel match {
+              case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+              case _ => BigInt.int2bigInt(0)
+            }
+            case JavaMethodOrigin(cons) => cons.contract.staticLevel match {
+              case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+              case _ => BigInt.int2bigInt(0)
+            }
+            case _ => BigInt.int2bigInt(0)
+          }
+          val initLevelAssign = Assign(Local(new DirectRef[Post, Variable[Post]](currentLevelVar)), IntegerValue(initLevel))(PanicBlame(""))
           val newBody = im.body match {
             case None => None
             case Some(s) =>
               val newS = dispatch(s)
-              Some(Scope(Seq(currentLevelVar), newS)(im.o))
+              Some(Scope(Seq(currentLevelVar), Block(Seq(initLevelAssign, newS)))(im.o))
           }
           new InstanceMethod[Post](dispatch(im.returnType), variables.collect(im.args.map(dispatch(_)))._1,
             variables.collect(im.outArgs.map(dispatch(_)))._1, variables.collect(im.typeArgs.map(dispatch(_)))._1,
@@ -228,13 +241,22 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         classDeclarations.succeed(im, newOne)
       case p: Procedure[Pre] =>
         currentDecl = p
+        implicit val o: Origin = p.o
         val newOne = labelDecls.scope {
           val currentLevelVar = new Variable[Post](TInt[Post]())(p.o)
+          val initLevel = p.o match {
+            case JavaConstructorOrigin(cons) => cons.contract.staticLevel match {
+              case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
+              case _ => BigInt.int2bigInt(0)
+            }
+            case _ => BigInt.int2bigInt(0)
+          }
+          val initLevelAssign = Assign(Local(new DirectRef[Post, Variable[Post]](currentLevelVar)), IntegerValue(initLevel))(PanicBlame(""))
           val newBody = p.body match {
             case None => None
             case Some(s) =>
               val newS = dispatch(s)
-              Some(Scope(Seq(currentLevelVar), newS)(p.o))
+              Some(Scope(Seq(currentLevelVar), Block(Seq(initLevelAssign, newS))))
           }
           new Procedure[Post](dispatch(p.returnType), variables.collect(p.args.map(dispatch(_)))._1,
             variables.collect(p.outArgs.map(dispatch(_)))._1, variables.collect(p.typeArgs.map(dispatch(_)))._1,
