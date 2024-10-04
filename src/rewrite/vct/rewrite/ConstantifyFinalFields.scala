@@ -207,10 +207,46 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         } else {
           rewriteDefault(field)
         }
+      case jsi: JavaSharedInitialization[Pre] =>
+        currentDecl = jsi
+        val newOne = new JavaSharedInitialization[Post](jsi.isStatic, dispatch(jsi.initialization), dispatch(jsi.contract))(jsi.o)
+        classDeclarations.succeed(jsi, newOne)
+      case im: InstanceMethod[Pre] =>
+        currentDecl = im
+        val newOne = labelDecls.scope {
+          val currentLevelVar = new Variable[Post](TInt[Post]())(im.o)
+          val newBody = im.body match {
+            case None => None
+            case Some(s) =>
+              val newS = dispatch(s)
+              Some(Scope(Seq(currentLevelVar), newS)(im.o))
+          }
+          new InstanceMethod[Post](dispatch(im.returnType), variables.collect(im.args.map(dispatch(_)))._1,
+            variables.collect(im.outArgs.map(dispatch(_)))._1, variables.collect(im.typeArgs.map(dispatch(_)))._1,
+            newBody, dispatch(im.contract), im.inline, im.pure)(im.o)(im.o)
+        }
+        classDeclarations.succeed(im, newOne)
+      case p: Procedure[Pre] =>
+        currentDecl = p
+        val newOne = labelDecls.scope {
+          val currentLevelVar = new Variable[Post](TInt[Post]())(p.o)
+          val newBody = p.body match {
+            case None => None
+            case Some(s) =>
+              val newS = dispatch(s)
+              Some(Scope(Seq(currentLevelVar), newS)(p.o))
+          }
+          new Procedure[Post](dispatch(p.returnType), variables.collect(p.args.map(dispatch(_)))._1,
+            variables.collect(p.outArgs.map(dispatch(_)))._1, variables.collect(p.typeArgs.map(dispatch(_)))._1,
+            newBody, dispatch(p.contract), p.inline, p.pure)(p.o)(p.o)
+        }
+        globalDeclarations.succeed(p, newOne)
       case other =>
         //TODO: This is definitely not the right way to do this, but it works for now.
-        if (other.isInstanceOf[AbstractMethod[_]] || other.isInstanceOf[JavaSharedInitialization[_]])
+        if (other.isInstanceOf[AbstractMethod[_]] || other.isInstanceOf[JavaSharedInitialization[_]]) {
+          println(other.getClass)
           currentDecl = other
+        }
         rewriteDefault(other)
     }
   }
