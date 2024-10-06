@@ -227,6 +227,13 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
             }
             case _ => BigInt.int2bigInt(0)
           }
+          val newContract = im.o match {
+            case JavaMethodOrigin(m) if m.name == "main" && m.modifiers.contains(JavaStatic()) && m.modifiers.contains(JavaPublic()) =>
+              val origContract = dispatch(im.contract)
+              val allTokens = foldStar(tokenPredMap.values.map(p => PredicateApply[Post](p.ref, Nil, WritePerm())).toSeq)
+              origContract.copy(requires = SplitAccountedPredicate(UnitAccountedPredicate(allTokens), origContract.requires))(origContract.blame)
+            case _=> dispatch(im.contract)
+          }
           val initLevelAssign = Assign(Local(new DirectRef[Post, Variable[Post]](currentLevelVar)), IntegerValue(initLevel))(PanicBlame(""))
           val newBody = im.body match {
             case None => None
@@ -236,7 +243,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
           }
           new InstanceMethod[Post](dispatch(im.returnType), variables.collect(im.args.map(dispatch(_)))._1,
             variables.collect(im.outArgs.map(dispatch(_)))._1, variables.collect(im.typeArgs.map(dispatch(_)))._1,
-            newBody, dispatch(im.contract), im.inline, im.pure)(im.o)(im.o)
+            newBody, newContract, im.inline, im.pure)(im.o)(im.o)
         }
         classDeclarations.succeed(im, newOne)
       case p: Procedure[Pre] =>
@@ -249,7 +256,8 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
               case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
               case _ => BigInt.int2bigInt(0)
             }
-            case _ => BigInt.int2bigInt(0)
+            case _ =>
+              BigInt.int2bigInt(0)
           }
           val initLevelAssign = Assign(Local(new DirectRef[Post, Variable[Post]](currentLevelVar)), IntegerValue(initLevel))(PanicBlame(""))
           val newBody = p.body match {

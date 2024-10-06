@@ -70,6 +70,16 @@ class JavaString {
         //assert CONST != CONST2;
     }
 
+    public static void main(String[] args) {
+        //@ assert \token(JavaString, write);
+        int asdasd = 123123123213213;
+    }
+
+    public static void main2(String[] args) {
+        //@ assert \token(JavaString, write);
+        int asdasd = 123123123213213;
+    }
+
 }
 
 
