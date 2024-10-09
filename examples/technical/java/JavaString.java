@@ -2,7 +2,8 @@
   static_level 2;
   static_invariant Perm(myNumber, write);
   static_invariant JavaString.myNumber >= 33;
-  dup_static_invariant Perm(myNumber, write);
+  dup_static_invariant Perm(invonly, read);
+  dup_static_invariant JavaString.invonly == 0;
 @*/
 class JavaString {
     public static final String CONST = "my constant string";
@@ -17,26 +18,30 @@ class JavaString {
 
 
     /*@
-      requires n > 456;
+      requires n > 0;
       static_level 5;
     @*/
     public JavaString(int n) {
         intNumber = n;
+        //@ commit this;
     }
 
     /*@
       static_level 4;
     @*/
     static {
+        // implicitly: inhale perm to all static fields
+
         int i = 6;
-        // decreases i;
+        //@ decreases i;
         while (i > 0)
         {
             i--;
         }
-        nonTerm();
         myNumber = 42;
-    }
+        invonly = 0;
+    } // implicitly: ensures staticInv, dupStaticInv
+      // implicitly: must terminate
 
     public static void nonTerm() { nonTerm(); }
 
@@ -48,7 +53,7 @@ class JavaString {
       static_level 5;
     @*/
     public void g() {
-        JavaString js = new JavaString(5);
+        JavaString js = new JavaString(5);  // inhale \initialized(JavaString);
 
 
         assert myNumber == 0;
@@ -71,12 +76,19 @@ class JavaString {
     }
 
     public static void main(String[] args) {
+        // implicit: requires \token(JavaString, write) ** \token(Other, write) ** ...
+
+
         //@ assert \token(JavaString, write);
-        int asdasd = 123123123213213;
+        //@ openDupInv JavaString;
+        // openInv JavaString write;
+        int asdasd = JavaString.myNumber;
+
+        JavaString.myNumber = 1234567;  // inhale \initialized(JavaString);
     }
 
     public static void main2(String[] args) {
-        //@ assert \token(JavaString, write);
+        // assert \token(JavaString, write);
         int asdasd = 123123123213213;
     }
 
@@ -88,9 +100,12 @@ class Other {
     //@ static_level 456;
     static {
         //@ openDupInv JavaString;
+
+
         //@ openInv JavaString write;
-        JavaString.myNumber = 55;
+
+        JavaString.myNumber = 55; // inhale \initialized(JavaString);
+
         //@ closeInv JavaString write;
-        //JavaString.myNumber = 55;
     }
 }

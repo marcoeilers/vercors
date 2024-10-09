@@ -211,6 +211,11 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
       case _ => None
     }
 
+    val dupStaticInv = clz match {
+      case Some(cls: JavaClass[Pre]) => cls.dupStaticInvariant
+      case _ => None
+    }
+
     // 3. the body of the constructor
 
     val declsDefault = if(decls.collect { case _: JavaConstructor[Pre] => () }.isEmpty) {
@@ -294,12 +299,19 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
                   SplitAccountedPredicate(left = UnitAccountedPredicate(rw.dispatch(staticInv.get)), right = rw.dispatch(cons.contract.ensures))
                 else
                   rw.dispatch(cons.contract.ensures)
+                val ensurePrime = if (dupStaticInv.isDefined) {
+                  val dupStaticInvDisp = rw.dispatch(dupStaticInv.get)
+                  val dupInvPred = UnitAccountedPredicate(dupStaticInvDisp)
+                  SplitAccountedPredicate(left = dupInvPred, right = ensure)
+                } else {
+                  ensure
+                }
                 cons.contract.rewrite(
                 decreases = Some(DecreasesClauseTuple(Seq())),
                 requires = rw.dispatch(sharedInitPreHead),
                 ensures = SplitAccountedPredicate(
                   left = UnitAccountedPredicate((result !== Null()) && (TypeOf(result) === TypeValue(t))),
-                  right = ensure,
+                  right = ensurePrime,
                 ),
                 staticLevel = staticLevelThing.map(rw.dispatch),
                 signals = cons.contract.signals.map(rw.dispatch) ++
