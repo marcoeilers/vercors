@@ -144,7 +144,12 @@ trait SilverBackend extends Backend with LazyLogging {
         invocation.blame.blame(blame.PreconditionFailed(path(reason.offendingNode), getFailure(reason), invocation))
       case PreconditionInAppFalse(node, reason, _) =>
         val invocation = get[col.FunctionInvocation[_]](node)
-        invocation.blame.blame(blame.PreconditionFailed(path(reason.offendingNode), getFailure(reason), invocation))
+        try {
+          invocation.blame.blame(blame.PreconditionFailed(path(reason.offendingNode), getFailure(reason), invocation))
+        } catch {
+          case _ =>
+            invocation.blame.blame(blame.PreconditionFailed(Seq(), getFailure(reason), invocation))
+        }
       case ExhaleFailed(node, reason, _) =>
         val exhale = get[col.Exhale[_]](node)
         reason match {

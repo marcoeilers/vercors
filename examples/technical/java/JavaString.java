@@ -1,5 +1,5 @@
 /*@
-  static_level 2;
+  static_level 7;
   static_invariant Perm(myNumber, write);
   static_invariant JavaString.myNumber >= 33;
   dup_static_invariant Perm(invonly, read);
@@ -27,7 +27,7 @@ class JavaString {
     }
 
     /*@
-      static_level 4;
+      static_level 6;
     @*/
     static {
         // implicitly: inhale perm to all static fields
@@ -43,6 +43,9 @@ class JavaString {
     } // implicitly: ensures staticInv, dupStaticInv
       // implicitly: must terminate
 
+    //@ static_level 5;
+    public static void nothing() {}
+
     public static void nonTerm() { nonTerm(); }
 
     /*@
@@ -53,6 +56,7 @@ class JavaString {
       static_level 5;
     @*/
     public void g() {
+
         JavaString js = new JavaString(5);  // inhale \initialized(JavaString);
 
 
@@ -75,6 +79,7 @@ class JavaString {
         //assert CONST != CONST2;
     }
 
+    //@ static_level 10;
     public static void main(String[] args) {
         // implicit: requires \token(JavaString, write) ** \token(Other, write) ** ...
 
@@ -94,7 +99,7 @@ class JavaString {
 
 }
 
-
+//@ static_level 500;
 class Other {
 
     //@ static_level 456;

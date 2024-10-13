@@ -13,6 +13,7 @@ import vct.col.util.{AstBuildHelpers, SuccessionMap}
 import RewriteHelpers._
 import vct.col.resolve.lang.Java
 import vct.col.resolve.lang.JavaAnnotationData.{BipComponent, BipData, BipGuard, BipTransition}
+import vct.col.serialize.DecreasesClause
 import vct.result.VerificationError.{Unreachable, UserError}
 
 import scala.collection.mutable
@@ -202,6 +203,8 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
       }
     }
 
+    val sharedInitStaticLevel = decls.find(d => d.isInstanceOf[JavaSharedInitialization[Pre]]).flatMap(d => d.asInstanceOf[JavaSharedInitialization[Pre]].contract.staticLevel)
+
     val staticFields = decls.collect {
       case jf: JavaFields[Pre] if jf.modifiers.exists(m => m.toString == "static") => jf
     }
@@ -248,7 +251,15 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
              field assignments required for ConstantifyFinalFields.
            */
           ensures = if(isStaticPart) UnitAccountedPredicate(tt[Pre]) else fieldPerms,
-          contextEverywhere = tt, signals = Nil, givenArgs = Nil, yieldsArgs = Nil, decreases = None, staticLevel = None
+          staticLevel = sharedInitStaticLevel match {
+            case Some(DecreasesClauseTuple(Seq(lvl))) =>
+              lvl match {
+                case iv@IntegerValue(_) => Some(DecreasesClauseTuple(Seq(iv)))
+                case _ => None
+              }
+            case _ => None
+          },
+          contextEverywhere = tt, signals = Nil, givenArgs = Nil, yieldsArgs = Nil, decreases = None
         )(TrueSatisfiable)
       )(PanicBlame("The postcondition of a default constructor cannot fail."))
       if (!isStaticPart) javaDefaultConstructor(currentJavaClass.top) = cons
