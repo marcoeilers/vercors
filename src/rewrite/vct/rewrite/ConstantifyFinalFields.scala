@@ -119,7 +119,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
           case jc: JavaClass[Pre] =>
             classLevels += jc.name -> (jc.staticLevel match {
               case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-              case None => 0
+              case None => 1
               case _ => throw new RuntimeException("Static level must be an integer.")
             })
 
@@ -434,7 +434,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       val constrName = i.ref.decl.o.asInstanceOf[JavaConstructorOrigin].cons.name
       implicit val o: Origin = AssumingInitializedOrigin(constrName)
 
-      val levelOkay = GreaterEq(getCurrentLevelValue(o), IntegerValue(declLevels(constrName, "init")))
+      val levelOkay = GreaterEq(getCurrentLevelValue(o), IntegerValue(declLevels.getOrElse((constrName, "init"), 0)))
 
       val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(constrName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
 
