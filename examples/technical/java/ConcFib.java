@@ -28,17 +28,23 @@ class HashMapIntInt {
 
 }
 
-//@ resource StaticInv()= Perm(Fib.cache, write) ** Perm(Fib.cache.contents, write) ** (0 \in Fib.cache.contents) ** (1 \in Fib.cache.contents) ** (\forall int i; i \in Fib.cache.contents; Fib.cache.contents[i] == Fib.fibSpec(i));
+//@ resource StaticInv()= Perm(ConcFib.cache, write) ** Perm(ConcFib.cache.contents, write) ** (0 \in ConcFib.cache.contents) ** (1 \in ConcFib.cache.contents) ** (\forall int i; i \in ConcFib.cache.contents; ConcFib.cache.contents[i] == ConcFib.fibSpec(i));
 
-//@ static_invariant StaticInv();
-class Fib {
+//@ lock_invariant StaticInv();
+class ConcFibLock {}
+
+//@ dup_static_invariant Perm(ConcFib.lock, read) ** ConcFib.lock != null ** committed(ConcFib.lock);
+class ConcFib {
     private static HashMapIntInt cache;
+    private static ConcFibLock lock;
 
     static {
         cache = new HashMapIntInt();
         cache.put(0, 1);
         cache.put(1, 1);
         //@ fold StaticInv();
+        lock = new ConcFibLock();
+        //@ commit lock;
     }
 
     public static /*@ pure @*/ int fibSpec(int n){
@@ -52,39 +58,42 @@ class Fib {
 
 
     /*@
+      static_level 5;
       requires n >= 0;
-      requires StaticInv();
-      ensures StaticInv();
+      requires \initialized(ConcFib);
       ensures \result == fibSpec(n);
      */
     public static int fib(int n) {
-        //@ unfold StaticInv();
-        boolean hasKey = cache.containsKey(n);
-        if (hasKey) {
-            int res = cache.get(n);
+        //@ openDupInv ConcFib;
+        synchronized (lock) {
+            //@ unfold StaticInv();
+            boolean hasKey = cache.containsKey(n);
+            if (hasKey) {
+                int res = cache.get(n);
+                //@ fold StaticInv();
+                return res;
+            }
             //@ fold StaticInv();
-            return res;
         }
-        //@ fold StaticInv();
         int result = fib(n - 1) + fib(n - 2);
-        //@ unfold StaticInv();
-        cache.put(n, result);
-        //@ fold StaticInv();
+        synchronized (lock) {
+            //@ unfold StaticInv();
+            cache.put(n, result);
+            //@ fold StaticInv();
+        }
+
         return result;
     }
 
     //@ static_level 10;
     public static void main(String[] args) {
-        //@ openInv Fib write;
         int fib0 = fib(0);
         int fib1 = fib(1);
         int fib2 = fib(2);
-        //@ assert fib2 == Fib.fibSpec(2);
-        //@ closeInv Fib write;
-        //@ assert fib1 == Fib.fibSpec(1);
-        //@ openInv Fib write;
+        //@ assert fib2 == ConcFib.fibSpec(2);
+        //@ assert fib1 == ConcFib.fibSpec(1);
         int fib3 = fib(3);
-        //@ assert fib3 == Fib.fibSpec(3);
+        //@ assert fib3 == ConcFib.fibSpec(3);
         int fib4 = fib(4);
     }
 }

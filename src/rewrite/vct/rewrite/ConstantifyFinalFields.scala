@@ -8,6 +8,7 @@ import vct.col.ast.RewriteHelpers._
 import vct.col.origin.{AbstractApplicable, Blame, InvocationFailure, Origin, PanicBlame, ReadableOrigin, TrueSatisfiable}
 import vct.col.ref.{DirectRef, LazyRef, Ref}
 import vct.col.rewrite.ConstantifyFinalFields.{AssumingInitializedOrigin, CheckingLevelGeOrigin, CheckingLevelGtOrigin, FinalFieldPerm, MarcoHelperOrigin}
+import vct.col.rewrite.exc.EncodeBreakReturn.ReturnClass
 import vct.col.rewrite.lang.LangJavaToCol.{JavaConstructorOrigin, JavaFieldOrigin, JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaMethodOrigin, JavaStaticsClassOrigin, JavaStaticsClassSingletonOrigin, JavaTokenPredicateOrigin}
 import vct.col.util.SuccessionMap
 import vct.result.VerificationError.UserError
@@ -110,10 +111,12 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
     }).toMap
 
     decl.declarations.foreach{
-      case cls: Class[Pre] =>
+      case cls: Class[Pre] if cls.o != ReturnClass =>
         val origin: JavaClassOrInterface[_] = cls.o match {
           case jico: JavaInstanceClassOrigin => jico.cls
           case jsco: JavaStaticsClassOrigin => jsco.cls
+          case _ =>
+            ???
         }
         origin match {
           case jc: JavaClass[Pre] =>
@@ -240,7 +243,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       globalDeclarations.declare(assertingFunc)
     })
     decl match {
-      case cls: Class[Pre] if !cls.o.isInstanceOf[JavaStaticsClassOrigin] =>
+      case cls: Class[Pre] if !cls.o.isInstanceOf[JavaStaticsClassOrigin] && cls.o != ReturnClass =>
         val origin: JavaClassOrInterface[_] = cls.o match {
           case jico: JavaInstanceClassOrigin => jico.cls
           case jsco: JavaStaticsClassOrigin => jsco.cls
@@ -318,7 +321,18 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
             case JavaMethodOrigin(m) if m.name == "main" && m.modifiers.contains(JavaStatic()) && m.modifiers.contains(JavaPublic()) =>
               val origContract = dispatch(im.contract)
               val allTokens = foldStar(tokenPredMap.values.map(p => PredicateApply[Post](p.ref, Nil, WritePerm())).toSeq)
-              origContract.copy(requires = SplitAccountedPredicate(UnitAccountedPredicate(allTokens), origContract.requires))(origContract.blame)
+              val curClassName = currentClass.top.o match {
+                case JavaStaticsClassOrigin(cls) => cls.name
+              }
+              val curClassInit = FunctionInvocation[Post](initializedFunctionMap.ref(curClassName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+              origContract.copy(requires = SplitAccountedPredicate(SplitAccountedPredicate(UnitAccountedPredicate(curClassInit), UnitAccountedPredicate(allTokens)), origContract.requires))(origContract.blame)
+            case JavaMethodOrigin(m) if m.modifiers.contains(JavaStatic()) =>
+              val curClassName = currentClass.top.o match {
+                case JavaStaticsClassOrigin(cls) => cls.name
+              }
+              val curClassInit = FunctionInvocation[Post](initializedFunctionMap.ref(curClassName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+              val origContract = dispatch(im.contract)
+              origContract.copy(requires = SplitAccountedPredicate(UnitAccountedPredicate(curClassInit), origContract.requires))(origContract.blame)
             case _=> dispatch(im.contract)
           }
           val initLevelSeq = LiteralSeq(TInt[Post](), Seq(IntegerValue[Post](initLevel)))
@@ -464,12 +478,14 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       }
       val levelOkay = GreaterEq(getCurrentLevelValue(pip.o), IntegerValue(procedureLevel))
       asserting(levelOkay, pip, pi.t)(o)(o)
-    case no: NewObject[Pre] =>
+    case no: NewObject[Pre] if no.cls.decl.o != ReturnClass =>
       implicit val o: Origin = e.o
       val clsDecl = no.cls.decl
       val jc = clsDecl.o match {
         case jico: JavaInstanceClassOrigin => jico.cls
         case jsco: JavaStaticsClassOrigin => jsco.cls
+        case _ =>
+          ???
       }
       val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
 
