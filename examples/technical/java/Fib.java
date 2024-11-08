@@ -30,10 +30,12 @@ class HashMapIntInt {
 
 //@ resource StaticInv()= Perm(Fib.cache, write) ** Perm(Fib.cache.contents, write) ** (0 \in Fib.cache.contents) ** (1 \in Fib.cache.contents) ** (\forall int i; i \in Fib.cache.contents; Fib.cache.contents[i] == Fib.fibSpec(i));
 
+//@ static_level 3;
 //@ static_invariant StaticInv();
 class Fib {
     private static HashMapIntInt cache;
 
+    //@ static_level 2;
     static {
         cache = new HashMapIntInt();
         cache.put(0, 1);

@@ -2,28 +2,16 @@ package vct.col.rewrite
 
 import hre.util.ScopedStack
 import vct.col.ast._
-import vct.col.rewrite.{Generation, Rewriter, RewriterBuilder}
 import vct.col.util.AstBuildHelpers._
-import vct.col.ast.RewriteHelpers._
+import vct.col.ast.node.NodeImpl
 import vct.col.origin.{AbstractApplicable, Blame, InvocationFailure, Origin, PanicBlame, ReadableOrigin, TrueSatisfiable}
-import vct.col.ref.{DirectRef, LazyRef, Ref}
-import vct.col.rewrite.ConstantifyFinalFields.{AssumingInitializedOrigin, CheckingLevelGeOrigin, CheckingLevelGtOrigin, FinalFieldPerm, MarcoHelperOrigin}
+import vct.col.ref.{DirectRef, Ref}
+import vct.col.rewrite.ConstatifyFinalFieldsHelpers.{AssumingInitializedOrigin, CheckingLevelGeOrigin, CheckingLevelGtOrigin, MarcoHelperOrigin}
 import vct.col.rewrite.exc.EncodeBreakReturn.ReturnClass
 import vct.col.rewrite.lang.LangJavaToCol.{JavaConstructorOrigin, JavaFieldOrigin, JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaMethodOrigin, JavaStaticsClassOrigin, JavaStaticsClassSingletonOrigin, JavaTokenPredicateOrigin}
 import vct.col.util.SuccessionMap
-import vct.result.VerificationError.UserError
 
-import scala.collection.mutable
-
-case object ConstantifyFinalFields extends RewriterBuilder {
-  override def key: String = "constantFinalFields"
-  override def desc: String = "Encode final fields with functions, so that they are not on the heap."
-
-  case class FinalFieldPerm(loc: FieldLocation[_]) extends UserError {
-    override def code: String = "finalFieldPerm"
-    override def text: String =
-      loc.o.messageInContext("Specifying permission over final fields is not allowed, since they are treated as constants.")
-  }
+case object ConstatifyFinalFieldsHelpers {
 
   case class MarcoHelperOrigin(name: String) extends Origin {
     override def preferredName: String = name + "Helper"
@@ -66,10 +54,16 @@ case object ConstantifyFinalFields extends RewriterBuilder {
   }
 }
 
-case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
+case class ConstantifyFinalFieldsBuilder(sequential: Boolean) extends RewriterBuilder {
+
+  override def apply[Pre <: Generation](): AbstractRewriter[Pre, _ <: Generation] = ConstantifyFinalFields(sequential)
+  override def key: String = "constantFinalFields"
+  override def desc: String = "Encode final fields with functions, so that they are not on the heap."
+
+}
+
+case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false) extends Rewriter[Pre] {
   val currentClass: ScopedStack[Class[Pre]] = ScopedStack()
-  var finalValueMap: Map[Declaration[Pre], Expr[Pre]] = Map()
-  val fieldFunction: SuccessionMap[InstanceField[Pre], Function[Post]] = SuccessionMap()
 
   var tokenPredMap: Map[String, Predicate[Post]] = Map()
   var initializedFunctionMap: SuccessionMap[String, Function[Post]] = SuccessionMap()
@@ -103,13 +97,6 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
   }
 
   override def dispatch(decl: Program[Pre]): Program[Post] = {
-    finalValueMap = decl.transSubnodes.collect({
-      // Note that we don't check the value of deref here, so if isClosedConstant is extended without care, this
-      // might produce unsoundness in the future. E.g. if variables are present in the init value, this approach fails
-      case Assign(Deref(_, Ref(field)), value) if isFinal(field) && isAllowedValue(value) =>
-        (field, value)
-    }).toMap
-
     decl.declarations.foreach{
       case cls: Class[Pre] if cls.o != ReturnClass =>
         val origin: JavaClassOrInterface[_] = cls.o match {
@@ -174,10 +161,27 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
     super.dispatch(decl)
   }
 
-  def isJavaStdLin(decl: JavaClassDeclaration[_]): Boolean = {
+  def isJavaStdLin(decl: NodeImpl[_]): Boolean = {
     decl.o match {
-      case ro: ReadableOrigin => ro.toString.contains("vercors/res/universal/res/jdk/java/lang")
-      case _ => false
+      case ro: ReadableOrigin => ro.toString.contains("jdk/java/lang")
+      case _ =>
+        ???
+    }
+  }
+
+  def isNotInStdLib(): Boolean = {
+    if (currentDecl != null) {
+      currentDecl.o match {
+        case _: ReadableOrigin => !isJavaStdLin(currentDecl)
+        case JavaMethodOrigin(m) => !isJavaStdLin(m)
+        case JavaConstructorOrigin(jc) => !isJavaStdLin(jc)
+        case _ =>
+          ???
+      }
+    } else if (currentClass.nonEmpty) {
+      !isJavaStdLin(currentClass.top)
+    } else {
+      ???
     }
   }
 
@@ -258,48 +262,11 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       case _ =>
     }
     decl match {
-      case cls: Class[Pre] if cls.o.isInstanceOf[JavaStaticsClassOrigin] =>
-
-        val origin: JavaClassOrInterface[_] = cls.o match {
-          case jico: JavaInstanceClassOrigin => jico.cls
-          case jsco: JavaStaticsClassOrigin => jsco.cls
-        }
-
+      case cls: Class[Pre] =>
         currentClass.having(cls) { rewriteDefault(cls) }
       case field: InstanceField[Pre] =>
         implicit val o: Origin = field.o
-        if(isFinal(field)) {
-          fieldFunction(field) = globalDeclarations.declare(
-            withResult((result: Result[Post]) => function[Post](
-              blame = AbstractApplicable,
-              contractBlame = TrueSatisfiable,
-              returnType = dispatch(field.t),
-              args = Seq(new Variable[Post](TClass(succ(currentClass.top)))),
-              ensures = UnitAccountedPredicate(finalValueMap.get(field) match {
-                case Some(value) => result === rewriteDefault(value)
-                case None => tt[Post]
-              })
-            ))
-          )
-        } else {
-          rewriteDefault(field)
-        }
-      case jsi: JavaSharedInitialization[Pre] =>
-        assert(false)  // we should never get here.
-        currentDecl = jsi
-        val initLevel = jsi.o match {
-          case JavaConstructorOrigin(cons) => cons.contract.staticLevel match {
-            case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-            case _ => BigInt.int2bigInt(0)
-          }
-          case JavaMethodOrigin(cons) => cons.contract.staticLevel match {
-            case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-            case _ => BigInt.int2bigInt(0)
-          }
-          case _ => BigInt.int2bigInt(0)
-        }
-        val newOne = new JavaSharedInitialization[Post](jsi.isStatic, dispatch(jsi.initialization), dispatch(jsi.contract))(jsi.o)
-        classDeclarations.succeed(jsi, newOne)
+        rewriteDefault(field)
       case im: InstanceMethod[Pre] =>
         currentDecl = im
         implicit val o: Origin = im.o
@@ -326,11 +293,12 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
               }
               val curClassInit = FunctionInvocation[Post](initializedFunctionMap.ref(curClassName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
               origContract.copy(requires = SplitAccountedPredicate(SplitAccountedPredicate(UnitAccountedPredicate(curClassInit), UnitAccountedPredicate(allTokens)), origContract.requires))(origContract.blame)
-            case JavaMethodOrigin(m) if m.modifiers.contains(JavaStatic()) =>
+            case JavaMethodOrigin(m) =>
               val curClassName = currentClass.top.o match {
                 case JavaStaticsClassOrigin(cls) => cls.name
+                case JavaInstanceClassOrigin(cls) => cls.name
               }
-              val curClassInit = FunctionInvocation[Post](initializedFunctionMap.ref(curClassName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+              val curClassInit = PolarityDependent(FunctionInvocation[Post](initializedFunctionMap.ref(curClassName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing")), BooleanValue(true))
               val origContract = dispatch(im.contract)
               origContract.copy(requires = SplitAccountedPredicate(UnitAccountedPredicate(curClassInit), origContract.requires))(origContract.blame)
             case _=> dispatch(im.contract)
@@ -401,8 +369,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
   override def dispatch(e: Expr[Pre]): Expr[Post] = e match {
     case Deref(obj, Ref(field)) =>
       implicit val o: Origin = e.o
-      if(isFinal(field)) FunctionInvocation[Post](fieldFunction.ref(field), Seq(dispatch(obj)), Nil, Nil, Nil)(PanicBlame("requires nothing"))
-      else rewriteDefault(e)
+      rewriteDefault(e)
     case Initialized(cls) =>
       implicit val o: Origin = e.o
       val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
@@ -421,6 +388,8 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       val fi = FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
       Implies[Post](fi, dispatch(ass))
     case Token(cls, prm) =>
+      if (sequential)
+        println("Warning: Token assertions not allowed in sequential mode")
       implicit val o: Origin = e.o
       val clsDecl = cls.asInstanceOf[TypeValue[_]].value.asInstanceOf[TClass[_]].cls.decl
       val jc = clsDecl.o match {
@@ -428,35 +397,28 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
       PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, dispatch(prm))
-    case i: FunctionInvocation[Pre] if false && i.ref.decl.o.isInstanceOf[JavaStaticsClassSingletonOrigin] =>
-      ???
-//      implicit val o: Origin = i.o
-//
-//       i.ref.decl.o.asInstanceOf[JavaStaticsClassSingletonOrigin].cls match {
-//        case jc: JavaClass[Pre] =>
-//          val ip = rewriteDefault(i)
-//          val initFI = FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
-//          val res = assuming(initFI, ip, i.t) //FunctionInvocation[Post](onceStuff.ref("assuming"), Seq(initFI, ip), Seq(dispatch(i.t)), Nil, Nil)(PanicBlame("requires nothing"))
-//          res
-//        case _ =>
-//          val ip = rewriteDefault(i)
-//          ip
-//      }
     case jnc: JavaNewClass[_] =>
       rewriteDefault(jnc)
-    case i: ProcedureInvocation[Pre] if i.ref.decl.o.isInstanceOf[JavaConstructorOrigin] =>
+    case i: ProcedureInvocation[Pre] if i.ref.decl.o.isInstanceOf[JavaConstructorOrigin] && isNotInStdLib() =>
       val constrName = i.ref.decl.o.asInstanceOf[JavaConstructorOrigin].cons.name
-      implicit val o: Origin = AssumingInitializedOrigin(constrName)
+      val assumeOrig: Origin = AssumingInitializedOrigin(constrName)
+      implicit val o: Origin = i.o
 
-      val levelOkay = GreaterEq(getCurrentLevelValue(o), IntegerValue(declLevels.getOrElse((constrName, "init"), 0)))
+      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(constrName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(assumeOrig)
+      val procedureLevel = IntegerValue[Post](declLevels.getOrElse((constrName, "init"), 0))
+      val classLevel = IntegerValue[Post](classLevels.getOrElse(constrName, 0))
+      val maxLevel = max(procedureLevel, classLevel)
 
-      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(constrName), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
+      val calledLevel = Select[Post](initialized, procedureLevel, maxLevel)
+
+      val levelOkay = GreaterEq(getCurrentLevelValue(o), calledLevel)
+
 
       val nop: Expr[Post] = rewriteDefault(i)
       val nopAssertingLevelOkay = asserting(levelOkay, nop, i.t)(o)(o)
 
-      assuming(initialized, nopAssertingLevelOkay, i.t)(o)
-    case pi: ProcedureInvocation[Pre] =>
+      assuming(initialized, nopAssertingLevelOkay, i.t)(assumeOrig)
+    case pi: ProcedureInvocation[Pre] if isNotInStdLib() =>
       implicit val o: Origin = CheckingLevelGeOrigin
       val pip = rewriteDefault(pi)
       val procedureLevel = pi.ref.decl match {
@@ -467,8 +429,8 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       }
       val levelOkay = GreaterEq(getCurrentLevelValue(pip.o), IntegerValue(procedureLevel))
       asserting(levelOkay, pip, pi.t)(o)(o)
-    case pi: MethodInvocation[Pre] =>
-      implicit val o: Origin = CheckingLevelGeOrigin
+    case pi: MethodInvocation[Pre] if isNotInStdLib() =>
+      implicit val o: Origin = pi.o // CheckingLevelGeOrigin
       val pip = rewriteDefault(pi)
       val procedureLevel = pi.ref.decl match {
         case im: InstanceMethod[Pre] => im.contract.staticLevel match {
@@ -476,9 +438,41 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
           case _ => BigInt(0)
         }
       }
-      val levelOkay = GreaterEq(getCurrentLevelValue(pip.o), IntegerValue(procedureLevel))
-      asserting(levelOkay, pip, pi.t)(o)(o)
-    case no: NewObject[Pre] if no.cls.decl.o != ReturnClass =>
+      val isStaticMethod = pi.ref.decl match {
+        case im: InstanceMethod[Pre] => im.o match {
+          case JavaMethodOrigin(m) =>
+            m.modifiers.contains(JavaStatic())
+          case _ => false
+        }
+        case _ => false
+      }
+      val (toAssume, toAssert) = if (isStaticMethod) {
+        val className = pi.obj match {
+          case fi: FunctionInvocation[_] =>
+            fi.ref.decl match {
+              case f: Function[_] =>
+                f.o.asInstanceOf[JavaStaticsClassSingletonOrigin].cls match {
+                  case jc: JavaClass[_] => jc.name
+                }
+            }
+        }
+        val assumeOrig: Origin = AssumingInitializedOrigin(className)
+        val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(className), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(assumeOrig)
+        val procedureLevelValue = IntegerValue[Post](procedureLevel)
+        val classLevel = IntegerValue[Post](classLevels.getOrElse(className, 0))
+        val maxLevel = max(procedureLevelValue, classLevel)
+
+        val calledLevel = Select[Post](initialized, procedureLevelValue, maxLevel)
+
+        val levelOkay = GreaterEq(getCurrentLevelValue(o), calledLevel)
+        (initialized, levelOkay)
+      } else {
+        val levelOkay = GreaterEq(getCurrentLevelValue(pip.o), IntegerValue(procedureLevel))
+        (BooleanValue[Post](true), levelOkay)
+      }
+
+      assuming(toAssume, asserting(toAssert, pip, pi.t)(o)(o), pi.t)(o)
+    case no: NewObject[Pre] if no.cls.decl.o != ReturnClass && isNotInStdLib() =>
       implicit val o: Origin = e.o
       val clsDecl = no.cls.decl
       val jc = clsDecl.o match {
@@ -495,9 +489,11 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
   }
 
   override def dispatch(location: Location[Pre]): Location[Post] = location match {
-    case loc @ FieldLocation(_, Ref(field)) if isFinal(field) =>
-      throw FinalFieldPerm(loc)
     case other => rewriteDefault(other)
+  }
+
+  def max(a: Expr[Post], b: Expr[Post])(implicit o: Origin): Expr[Post] = {
+    Select(GreaterEq(a, b), a, b)
   }
 
   def assuming(toAssume: Expr[Post], value: Expr[Post], t: Type[Pre])(o: Origin): Expr[Post] = {
@@ -508,42 +504,86 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
     FunctionInvocation[Post](onceStuff.ref("asserting"), Seq(toAssert, value), Seq(dispatch(t)), Nil, Nil)(b)(o)
   }
 
-  def makeInhale(obj: Expr[Pre], field: InstanceField[Pre], value: Expr[Pre])(implicit o: Origin): Statement[Post] =
-    Assume(FunctionInvocation[Post](fieldFunction.ref(field), Seq(dispatch(obj)), Nil, Nil, Nil)(PanicBlame("requires nothing")) === dispatch(value))
-
-  override def dispatch(stat: Statement[Pre]): Statement[Post] = stat match {
-    case Assign(Deref(obj, Ref(field)), value) if isFinal(field) && finalValueMap.contains(field) => Block(Nil)(stat.o)
-    case Eval(PreAssignExpression(Deref(obj, Ref(field)), value)) if isFinal(field) && finalValueMap.contains(field) => Block(Nil)(stat.o)
-    case Assign(Deref(obj, Ref(field)), value) if isFinal(field) => makeInhale(obj, field, value)(stat.o)
+  override def dispatch(stat: Statement[Pre]): Statement[Post] = {
+    stat match {
     case Assign(Deref(obj, Ref(field: InstanceField[Pre])), value) if (field.o match {
       case jf: JavaFieldOrigin => jf.fields.isStatic
       case _ => false
-    }) =>
+    }) && isNotInStdLib() =>
       val objType = obj.t
       val cls = objType.asInstanceOf[TClass[Pre]].cls.decl
       val name = cls.o match {
         case jico: JavaInstanceClassOrigin => jico.cls.name
         case jsco: JavaStaticsClassOrigin => jsco.cls.name
       }
-      implicit val o: Origin = AssumingInitializedOrigin(name)
-      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
-      val assumeInit = Inhale[Post](initialized)
-      Block(Seq(assumeInit, rewriteDefault(stat)))
+      val initOrigin: Origin = AssumingInitializedOrigin(name)
+      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(initOrigin)
+      val assumeInit = Inhale[Post](initialized)(initOrigin)
+      implicit val o: Origin = stat.o
+
+      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
+      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
+      val assertLevelOkay = Assert(levelOkay)(o)
+
+      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
+    case Eval(PreAssignExpression(Deref(obj, Ref(field: InstanceField[Pre])), value)) if (field.o match {
+      case jf: JavaFieldOrigin => jf.fields.isStatic
+      case _ => false
+    }) && isNotInStdLib() =>
+      val objType = obj.t
+      val cls = objType.asInstanceOf[TClass[Pre]].cls.decl
+      val name = cls.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls.name
+        case jsco: JavaStaticsClassOrigin => jsco.cls.name
+      }
+      val initOrigin: Origin = AssumingInitializedOrigin(name)
+      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(initOrigin)
+      val assumeInit = Inhale[Post](initialized)(initOrigin)
+      implicit val o: Origin = stat.o
+
+      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
+      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
+      val assertLevelOkay = Assert(levelOkay)(o)
+
+      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
     case Assign(trgt, Deref(obj, Ref(field: InstanceField[Pre]))) if (field.o match {
       case jf: JavaFieldOrigin => jf.fields.isStatic
       case _ => false
-    }) =>
+    }) && isNotInStdLib() =>
       val objType = obj.t
       val cls = objType.asInstanceOf[TClass[Pre]].cls.decl
       val name = cls.o match {
         case jico: JavaInstanceClassOrigin => jico.cls.name
         case jsco: JavaStaticsClassOrigin => jsco.cls.name
       }
-      implicit val o: Origin = AssumingInitializedOrigin(name)
-      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
-      val assumeInit = Inhale[Post](initialized)
-      Block(Seq(assumeInit, rewriteDefault(stat)))
-    case Eval(PreAssignExpression(Deref(obj, Ref(field)), value)) if isFinal(field) => makeInhale(obj, field, value)(stat.o)
+      val initOrigin: Origin = AssumingInitializedOrigin(name)
+      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(initOrigin)
+      val assumeInit = Inhale[Post](initialized)(initOrigin)
+      implicit val o: Origin = stat.o
+      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
+      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
+      val assertLevelOkay = Assert(levelOkay)(o)
+
+      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
+    case Eval(PreAssignExpression(trgt, Deref(obj, Ref(field: InstanceField[Pre])))) if (field.o match {
+      case jf: JavaFieldOrigin => jf.fields.isStatic
+      case _ => false
+    }) && isNotInStdLib() =>
+      val objType = obj.t
+      val cls = objType.asInstanceOf[TClass[Pre]].cls.decl
+      val name = cls.o match {
+        case jico: JavaInstanceClassOrigin => jico.cls.name
+        case jsco: JavaStaticsClassOrigin => jsco.cls.name
+      }
+      val initOrigin: Origin = AssumingInitializedOrigin(name)
+      val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(initOrigin)
+      val assumeInit = Inhale[Post](initialized)(initOrigin)
+      implicit val o: Origin = stat.o
+      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
+      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
+      val assertLevelOkay = Assert(levelOkay)(o)
+
+      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
     case CloseStaticInv(cls, amt) =>
       implicit val o: Origin = stat.o
       val clsDecl = cls.asInstanceOf[TypeValue[Pre]].value.asInstanceOf[TClass[Pre]].cls.decl
@@ -575,7 +615,7 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
         case jsco: JavaStaticsClassOrigin => jsco.cls
       }
       val amtPost = dispatch(amt)
-      val tokenPred = PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, amtPost)
+      val tokenPred = if (sequential) BooleanValue[Post](true) else PredicateApply[Post](tokenPredMap.get(jc.name).get.ref, Nil, amtPost)
 
       val currentLevel = getCurrentLevelValue(o)
       val clsLevel = jc.asInstanceOf[JavaClass[Pre]].staticLevel match {
@@ -613,5 +653,6 @@ case class ConstantifyFinalFields[Pre <: Generation]() extends Rewriter[Pre] {
       val in = Inhale[Post](Implies(initFI, foldStar(Seq(newVarPos, scaledInv))))(stat.o)
       Scope(Seq(newVar), Block(Seq(ex, in)))(stat.o)
     case other => rewriteDefault(other)
+  }
   }
 }

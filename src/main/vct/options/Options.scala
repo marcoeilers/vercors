@@ -236,6 +236,12 @@ case object Options {
         .text("Set the location of the C preprocessor binary"),
 
       note(""),
+      note("Sequential Java Init Mode"),
+      opt[Unit]("sequential-java-init")
+        .action((_, c) => c.copy(sequentialJavaInitMode = true))
+        .text("Enable Sequential Java Init mode"),
+
+    note(""),
       note("VeyMont Mode"),
       opt[Unit]("veymont")
         .action((_, c) => c.copy(mode = Mode.VeyMont))
@@ -353,6 +359,8 @@ case class Options
   siliconPrintQuantifierStats: Option[Int] = None,
 
   bipReportFile: Option[PathOrStd] = None,
+
+  sequentialJavaInitMode: Boolean = false,
 
   // Verify options - hidden
   devAbruptExc: Boolean = false,

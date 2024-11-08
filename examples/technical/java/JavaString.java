@@ -49,9 +49,7 @@ class JavaString {
     public static void nonTerm() { nonTerm(); }
 
     /*@
-      requires Perm(myNumber,write);
       requires Perm(hurgh, write);
-      requires myNumber == 0;
       requires \onInit(JavaString)(Perm(myNumber,write));
       static_level 5;
     @*/
@@ -60,7 +58,6 @@ class JavaString {
         JavaString js = new JavaString(5);  // inhale \initialized(JavaString);
 
 
-        assert myNumber == 0;
         "xuz";
         assert "abc" == "abc";
         // assert "abc".data()[0] != "xyz".data()[0]; // Needed for viper 22.02. Unfortunately spec string doesn't have indexing yet
@@ -107,7 +104,7 @@ class Other {
         //@ openDupInv JavaString;
 
 
-        //@ openInv JavaString write;
+        // openInv JavaString write;
 
         JavaString.myNumber = 55; // inhale \initialized(JavaString);
 

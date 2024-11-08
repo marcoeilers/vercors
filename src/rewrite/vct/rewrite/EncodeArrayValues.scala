@@ -163,7 +163,8 @@ case class EncodeArrayValues[Pre <: Generation]() extends Rewriter[Pre] {
         returnType = FuncTools.repeat[Type[Post]](TArray(_), definedDims + undefinedDims, dispatch(elementType)),
         args = dimArgs,
         requires = UnitAccountedPredicate(requires),
-        ensures = UnitAccountedPredicate(ensures &* forall(definedDims, (access, _) => access === undefinedValue))
+        ensures = UnitAccountedPredicate(ensures &* forall(definedDims, (access, _) => access === undefinedValue)),
+        decreases = Some(DecreasesClauseAssume[Post]())
       )(ArrayCreationOrigin("make_array"))
     }))
   }

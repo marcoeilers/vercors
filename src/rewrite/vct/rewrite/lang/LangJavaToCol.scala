@@ -172,15 +172,13 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
                 value = rw.dispatch(value),
                 blame = PanicBlame("The inline initialization of a field must have permission, because it is the first initialization that happens.")
               )
-            case None if fields.modifiers.collectFirst { case JavaFinal() => () }.isEmpty =>
+            case None =>
               assignField[Post](
                 obj = diz,
                 field = javaFieldsSuccessor.ref((fields, idx)),
                 value = Java.zeroValue(FuncTools.repeat(TArray[Post](_), dims, rw.dispatch(fields.t))),
                 blame = PanicBlame("The inline initialization of a field must have permission, because it is the first initialization that happens.")
               )
-            case None /* if modifiers contains final */ =>
-              Block(Nil)
           }
         )
     })
@@ -228,7 +226,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
         UnitAccountedPredicate(tt)
       } else {
         UnitAccountedPredicate(foldStar(decls.collect {
-          case fields: JavaFields[Pre] if fields.modifiers.collectFirst { case JavaFinal() => () }.isEmpty =>
+          case fields: JavaFields[Pre] =>
             fields.decls.indices.map(decl => {
               val local = JavaLocal[Pre](fields.decls(decl).name)(DerefPerm)
               local.ref = Some(RefJavaField[Pre](fields, decl))
@@ -292,7 +290,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
                 Return(res),
               ))))
             }
-            val staticFieldPerms = UnitAccountedPredicate(foldStar(staticFields.filter(sf => sf.modifiers.collectFirst { case JavaFinal() => () }.isEmpty).map(sf => sf.decls.indices.map(decl => {
+            val staticFieldPerms = UnitAccountedPredicate(foldStar(staticFields.map(sf => sf.decls.indices.map(decl => {
               val local = JavaLocal[Pre](sf.decls(decl).name)(DerefPerm)
               local.ref = Some(RefJavaField[Pre](sf, decl))
               Perm(AmbiguousLocation(local)(PanicBlame("Field location is not a pointer.")), WritePerm())

@@ -61,6 +61,7 @@ object Transformation {
           checkSat = options.devCheckSat,
           bipResults = bipResults,
           splitVerificationByProcedure = options.devSplitVerificationByProcedure,
+          sequentialJavaInitMode = options.sequentialJavaInitMode,
         )
     }
 
@@ -165,6 +166,7 @@ case class SilverTransformation
   bipResults: BIP.VerificationResults,
   checkSat: Boolean = true,
   splitVerificationByProcedure: Boolean = false,
+  sequentialJavaInitMode: Boolean = false,
 ) extends Transformation(onBeforePassKey, onAfterPassKey, Seq(
     DeserializeLLVMOrigin,
     ComputeBipGlue,
@@ -231,7 +233,7 @@ case class SilverTransformation
     // Make final fields constant functions. Explicitly before ResolveExpressionSideEffects, because that pass will
     // flatten out functions in the rhs of assignments, making it harder to detect final field assignments where the
     // value is pure and therefore be put in the contract of the constant function.
-    ConstantifyFinalFields,
+    ConstantifyFinalFieldsBuilder(sequentialJavaInitMode),
 
     // Resolve side effects including method invocations, for encodetrythrowsignals.
     ResolveExpressionSideEffects,

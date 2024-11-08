@@ -33,11 +33,14 @@ class HashMapIntInt {
 //@ lock_invariant StaticInv();
 class ConcFibLock {}
 
+
+//@ static_level 3;
 //@ dup_static_invariant Perm(ConcFib.lock, read) ** ConcFib.lock != null ** committed(ConcFib.lock);
 class ConcFib {
     private static HashMapIntInt cache;
     private static ConcFibLock lock;
 
+    //@ static_level 2;
     static {
         cache = new HashMapIntInt();
         cache.put(0, 1);
