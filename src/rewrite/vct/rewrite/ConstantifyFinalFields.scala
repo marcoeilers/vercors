@@ -442,7 +442,8 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
         case im: InstanceMethod[Pre] => im.o match {
           case JavaMethodOrigin(m) =>
             m.modifiers.contains(JavaStatic())
-          case _ => false
+          case _ =>
+            false
         }
         case _ => false
       }
@@ -470,8 +471,9 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
         val levelOkay = GreaterEq(getCurrentLevelValue(pip.o), IntegerValue(procedureLevel))
         (BooleanValue[Post](true), levelOkay)
       }
-
-      assuming(toAssume, asserting(toAssert, pip, pi.t)(o)(o), pi.t)(o)
+      val mip = pip.asInstanceOf[MethodInvocation[Post]]
+      mip.copy(obj = assuming(toAssume, asserting(toAssert, mip.obj, pi.obj.t)(o)(o), pi.obj.t)(o))(o)
+      //assuming(toAssume, asserting(toAssert, pip, pi.t)(o)(o), pi.t)(o)
     case no: NewObject[Pre] if no.cls.decl.o != ReturnClass && isNotInStdLib() =>
       implicit val o: Origin = e.o
       val clsDecl = no.cls.decl
