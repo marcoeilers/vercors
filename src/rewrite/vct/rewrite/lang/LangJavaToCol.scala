@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import hre.util.{FuncTools, ScopedStack}
 import vct.col.ast._
 import vct.col.rewrite.lang.LangSpecificToCol.{NotAValue, ThisVar}
-import vct.col.origin.{AbstractApplicable, DerefPerm, JavaArrayInitializerBlame, Origin, PanicBlame, PostBlameSplit, SourceNameOrigin, TrueSatisfiable}
+import vct.col.origin.{AbstractApplicable, DerefPerm, JavaArrayInitializerBlame, Origin, PanicBlame, PostBlameSplit, ReadableOrigin, SourceNameOrigin, TrueSatisfiable}
 import vct.col.ref.{LazyRef, Ref}
 import vct.col.resolve.ctx._
 import vct.col.rewrite.{Generation, Rewritten}
@@ -99,6 +99,12 @@ case object LangJavaToCol {
   case class InvalidArrayInitializerNesting(initializer: JavaLiteralArray[_]) extends UserError {
     override def text: String = initializer.o.messageInContext("This literal array is nested more deeply than its indicated type allows.")
     override def code: String = "invalidNesting"
+  }
+
+  case class InvalidSubclassLevel(jc: JavaClassOrInterface[_]) extends UserError {
+    override def text: String = jc.o.messageInContext("The static level of this class must be greater than that of its superclass.")
+
+    override def code: String = "invalidSubclassLevel"
   }
 
   case class NotSupportedInJavaLangStringClass(decl: ClassDeclaration[_]) extends UserError {
@@ -388,6 +394,44 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
 
   def rewriteClass(cls: JavaClassOrInterface[Pre]): Unit = {
     implicit val o: Origin = cls.o
+
+    val superClass = cls match {
+      case jc: JavaClass[Pre] => jc.ext match {
+        case jtc: JavaTClass[Pre] => jtc.ref.decl match {
+          case sjc: JavaClass[Pre] => Some(sjc)
+          case _ => None
+        }
+        case _ => None
+      }
+      case _ => None
+    }
+
+    cls.o match {
+      case ro: ReadableOrigin if ro.toString.contains("jdk/java/lang") =>
+      case _ if cls.isInstanceOf[JavaClass[Pre]] =>
+        val myLevel = cls.asInstanceOf[JavaClass[Pre]].staticLevel match {
+          case Some(DecreasesClauseTuple(Seq(lvl))) =>
+            lvl match {
+              case iv@IntegerValue(_) => iv.value
+              case _ => BigInt.int2bigInt(0)
+            }
+          case _ => BigInt.int2bigInt(0)
+        }
+        val superLevel = superClass match {
+          case Some(jc) if (jc.name != "Object") => jc.staticLevel match {
+            case Some(DecreasesClauseTuple(Seq(lvl))) =>
+              lvl match {
+                case iv@IntegerValue(_) => Some(iv.value)
+                case _ => ???
+              }
+            case _ => Some(BigInt.int2bigInt(0))
+          }
+          case _ => None
+        }
+        if (superLevel.isDefined && myLevel <= superLevel.get) {
+          throw InvalidSubclassLevel(cls)
+        }
+    }
 
     cls.decls.collect({
       case decl: JavaClassDeclaration[Pre] =>
