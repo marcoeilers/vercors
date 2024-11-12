@@ -279,23 +279,24 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
               case Some((_, init)) => throw StaticBlockWithNonTrivialSpec(init)
               case _ =>
             }
+            val umm = if (clz.isDefined)
+              Some(statics(clz.get))
+            else
+              None
 
 
             val body = rw.currentThis.having(res) {
               Some(Scope(Seq(resVar), Block(Seq(
                 assignLocal(res, NewObject(ref)),
                 fieldInit(res),
+                if (umm.isDefined) Inhale[Post](umm.get === res) else Block[Post](Seq()),
                 sharedInit(res),
                 rw.dispatch(cons.body),
                 Return(res),
               ))))
             }
-            val staticFieldPerms = UnitAccountedPredicate(foldStar(staticFields.map(sf => sf.decls.indices.map(decl => {
-              val local = JavaLocal[Pre](sf.decls(decl).name)(DerefPerm)
-              local.ref = Some(RefJavaField[Pre](sf, decl))
-              Perm(AmbiguousLocation(local)(PanicBlame("Field location is not a pointer.")), WritePerm())
-            })).flatten))
-            val sharedInitPreHead = SplitAccountedPredicate(left= staticFieldPerms, right = cons.contract.requires)
+
+            val sharedInitPreHead = cons.contract.requires // SplitAccountedPredicate(left= staticFieldPerms, right = cons.contract.requires)
 
             val staticLevelThing = sharedInitSpecsApplied.headOption.flatMap(_._2.contract.staticLevel)
             new Procedure(

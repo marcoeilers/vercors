@@ -63,7 +63,6 @@ class ConcFib {
     /*@
       static_level 5;
       requires n >= 0;
-      requires \initialized(ConcFib);
       ensures \result == fibSpec(n);
      */
     public static int fib(int n) {
