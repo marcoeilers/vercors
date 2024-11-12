@@ -1,7 +1,8 @@
 
-
+// implicit static level 1
 class HashMapIntInt {
 
+    // implicit static level 1
     //@ ensures Perm(contents, write);
     //@ ensures contents == map<int,int>{};
     public HashMapIntInt() {};
@@ -9,18 +10,21 @@ class HashMapIntInt {
 
     //@ ghost map<int, int> contents = map<int,int>{};
 
+    // implicit static level 1
     //@ decreases;
     //@ requires Perm(contents, write);
     //@ ensures Perm(contents, write);
     //@ ensures contents == \old(contents.add(key, value));
     public void put(int key, int value);
 
+    // implicit static level 1
     //@ decreases;
     //@ requires Perm(contents, read);
     //@ requires key \in contents;
     //@ ensures \result == contents[key];
     public /*@ pure @*/ int get(int key);
 
+    // implicit static level 1
     //@ decreases;
     //@ requires Perm(contents, read);
     //@ ensures \result == key \in contents;
@@ -35,7 +39,7 @@ class HashMapIntInt {
 class Fib {
     private static HashMapIntInt cache;
 
-    //@ static_level 2;
+    // implicit static_level 2;
     static {
         cache = new HashMapIntInt();
         cache.put(0, 1);
@@ -43,6 +47,7 @@ class Fib {
         //@ fold StaticInv();
     }
 
+    // implicit static level 1
     public static /*@ pure @*/ int fibSpec(int n){
         if (n <= 1) {
             return 1;
@@ -52,7 +57,7 @@ class Fib {
     }
 
 
-
+    // implicit static level 1
     /*@
       requires n >= 0;
       requires StaticInv();
@@ -75,7 +80,7 @@ class Fib {
         return result;
     }
 
-    //@ static_level 10;
+    //@ static_level 4;
     public static void main(String[] args) {
         //@ openInv Fib write;
         int fib0 = fib(0);

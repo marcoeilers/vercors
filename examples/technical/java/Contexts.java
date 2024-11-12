@@ -1,19 +1,23 @@
+// implicit static level 1
 class SourceFile {}
 
+// implicit static level 1
 class Context {
     private SourceFile _source = null;
 
     //@ decreases;
-    //@ static_level 0;
+    // implicit static_level 1;
     //@ ensures Perm(this._source, write);
     //@ ensures this._source == null;
     public Context() {}
 
+    // implicit static level 1
     //@ requires Perm(this._source, read);
     public final /*@ pure @*/ SourceFile source() {
         return _source;
     }
 
+    // implicit static level 1
     //@ requires Perm(this._source, write);
     //@ ensures Perm(this._source, write);
     //@ ensures this._source == source;
@@ -27,7 +31,7 @@ class Context {
 class Contexts {
     public static final Context NoContext;
 
-    //@ static_level 1;
+    // implicit static_level 1;
     static {
         NoContext = new Context();
     }
@@ -38,7 +42,7 @@ class Contexts {
 class Implicits {
     public static final SearchFailure NoMatchingFailure;
 
-    //@ static_level 4;
+    // implicit static_level 4;
     static {
         //@ openDupInv Contexts;
         Context nc = Contexts.NoContext;
@@ -46,13 +50,13 @@ class Implicits {
     }
 }
 
-//@ static_level 1;
+// implicit static_level 1;
 class SearchFailure {
     private int _tag;
     private SourceFile _source;
 
     //@ decreases;
-    //@ static_level 0;
+    // implicit static_level 1;
     //@ ensures Perm(this._tag, write) ** Perm(this._source, write);
     //@ ensures this._tag == tag;
     //@ ensures this._source == source;
@@ -61,12 +65,13 @@ class SearchFailure {
         this._source = source;
     }
 
-
+    // implicit static level 1
     //@ requires Perm(_tag, read);
     public /*@ pure @*/ int tag() {
         return _tag;
     }
 
+    // implicit static level 1
     //@ requires Perm(_source, read);
     public /*@ pure @*/ SourceFile source() {
         return _source;

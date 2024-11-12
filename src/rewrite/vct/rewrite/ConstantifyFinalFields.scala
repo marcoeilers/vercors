@@ -4,14 +4,20 @@ import hre.util.ScopedStack
 import vct.col.ast._
 import vct.col.util.AstBuildHelpers._
 import vct.col.ast.node.NodeImpl
-import vct.col.origin.{AbstractApplicable, Blame, InvocationFailure, Origin, PanicBlame, ReadableOrigin, TrueSatisfiable}
+import vct.col.origin.{Blame, InvocationFailure, Origin, PanicBlame, ReadableOrigin, TrueSatisfiable}
 import vct.col.ref.{DirectRef, Ref}
-import vct.col.rewrite.ConstatifyFinalFieldsHelpers.{AssumingInitializedOrigin, CheckingLevelGeOrigin, CheckingLevelGtOrigin, MarcoHelperOrigin}
+import vct.col.rewrite.ConstatifyFinalFieldsHelpers.{AssumingInitializedOrigin, CLASS_DEFAULT_LEVEL, CheckingLevelGeOrigin, CheckingLevelGtOrigin, METHOD_DEFAULT_LEVEL, MarcoHelperOrigin, initializerDefaultLevel}
+import vct.col.rewrite.EncodeArrayValues.ArrayCreationOrigin
 import vct.col.rewrite.exc.EncodeBreakReturn.ReturnClass
 import vct.col.rewrite.lang.LangJavaToCol.{JavaConstructorOrigin, JavaFieldOrigin, JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaMethodOrigin, JavaStaticsClassOrigin, JavaStaticsClassSingletonOrigin, JavaTokenPredicateOrigin}
 import vct.col.util.SuccessionMap
 
 case object ConstatifyFinalFieldsHelpers {
+  val CLASS_DEFAULT_LEVEL = BigInt.int2bigInt(1)
+  val METHOD_DEFAULT_LEVEL = BigInt.int2bigInt(1)
+
+  def initializerDefaultLevel(classLevel: BigInt) =
+    if (classLevel > 0) classLevel - 1 else BigInt.int2bigInt(0)
 
   case class MarcoHelperOrigin(name: String) extends Origin {
     override def preferredName: String = name + "Helper"
@@ -72,7 +78,6 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
   var declLevels = Map[(String, String), BigInt]()
   var currentLevelVars = Map[Declaration[Pre], Variable[Post]]()
   var currentDecl: Declaration[Pre] = null
-  var currentClassMarco: Class[Pre] = null
   var onceStuff : SuccessionMap[String, Function[Post]] = SuccessionMap()
 
   def isFinal(field: InstanceField[Pre]): Boolean =
@@ -207,7 +212,6 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
     val currentIsExpected = Exhale(currentOnStack === expectedCurrentValue)(o)
     val tail = Drop(currentLevelVar.get, IntegerValue(1))
     val newLevelAssign = Assign(Local(new DirectRef[Post, Variable[Post]](currentLevelVar)), tail)(PanicBlame(""))
-    // val initLevelAssign = Assign(Local(new DirectRef[Post, Variable[Post]](currentLevelVar)), initLevelSeq)(PanicBlame(""))
     Block(Seq(currentIsExpected, newLevelAssign))(o)
   }
 
@@ -276,13 +280,14 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
           val initLevel = im.o match {
             case JavaConstructorOrigin(cons) => cons.contract.staticLevel match {
               case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-              case _ => BigInt.int2bigInt(0)
+              case _ => METHOD_DEFAULT_LEVEL
             }
             case JavaMethodOrigin(cons) => cons.contract.staticLevel match {
               case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-              case _ => BigInt.int2bigInt(0)
+              case _ => METHOD_DEFAULT_LEVEL
             }
-            case _ => BigInt.int2bigInt(0)
+            case _ =>
+              METHOD_DEFAULT_LEVEL
           }
           val newContract = im.o match {
             case JavaMethodOrigin(m) if m.name == "main" && m.modifiers.contains(JavaStatic()) && m.modifiers.contains(JavaPublic()) =>
@@ -329,10 +334,12 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
             cons.contract.staticLevel match {
               case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) =>
                 iv.value
-              case _ => BigInt.int2bigInt(0)
+              case _ => if (isStaticInitializer) initializerDefaultLevel(staticInitClassLevel.get) else METHOD_DEFAULT_LEVEL
             }
-          case _ =>
+          case _: ArrayCreationOrigin =>
             BigInt.int2bigInt(0)
+          case _ =>
+            METHOD_DEFAULT_LEVEL
         }
 
         if (isStaticInitializer) {
@@ -424,7 +431,11 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val procedureLevel = pi.ref.decl match {
         case im: Procedure[Pre] => im.contract.staticLevel match {
           case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-          case _ => BigInt(0)
+          case _ =>
+            if (im.o.isInstanceOf[ArrayCreationOrigin])
+              BigInt.int2bigInt(0)
+            else
+              METHOD_DEFAULT_LEVEL
         }
       }
       val levelOkay = GreaterEq(getCurrentLevelValue(pip.o), IntegerValue(procedureLevel))
@@ -435,7 +446,8 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val procedureLevel = pi.ref.decl match {
         case im: InstanceMethod[Pre] => im.contract.staticLevel match {
           case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-          case _ => BigInt(0)
+          case _ =>
+            METHOD_DEFAULT_LEVEL
         }
       }
       val isStaticMethod = pi.ref.decl match {
@@ -460,7 +472,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
         val assumeOrig: Origin = AssumingInitializedOrigin(className)
         val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(className), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(assumeOrig)
         val procedureLevelValue = IntegerValue[Post](procedureLevel)
-        val classLevel = IntegerValue[Post](classLevels.getOrElse(className, 0))
+        val classLevel = IntegerValue[Post](classLevels.getOrElse(className, CLASS_DEFAULT_LEVEL))
         val maxLevel = max(procedureLevelValue, classLevel)
 
         val calledLevel = Select[Post](initialized, procedureLevelValue, maxLevel)
@@ -595,7 +607,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       }
       val clsLevel = jc.asInstanceOf[JavaClass[Pre]].staticLevel match {
         case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-        case None => BigInt(0)
+        case None => CLASS_DEFAULT_LEVEL
         case _ => throw new RuntimeException("Static level must be an integer.")
       }
       val currentLevel = getCurrentLevelValue(o)
@@ -622,7 +634,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val currentLevel = getCurrentLevelValue(o)
       val clsLevel = jc.asInstanceOf[JavaClass[Pre]].staticLevel match {
         case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-        case None => BigInt(0)
+        case None => CLASS_DEFAULT_LEVEL
         case _ => throw new RuntimeException("Static level must be an integer.")
       }
       val initFI = FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
@@ -642,7 +654,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       }
       val clsLevel = jc.asInstanceOf[JavaClass[Pre]].staticLevel match {
         case Some(DecreasesClauseTuple(Seq(iv: IntegerValue[_]))) => iv.value
-        case None => BigInt(0)
+        case None => CLASS_DEFAULT_LEVEL
         case _ => throw new RuntimeException("Static level must be an integer.")
       }
       val currentLevel = getCurrentLevelValue(o)

@@ -13,6 +13,7 @@ import vct.col.util.{AstBuildHelpers, SuccessionMap}
 import RewriteHelpers._
 import vct.col.resolve.lang.Java
 import vct.col.resolve.lang.JavaAnnotationData.{BipComponent, BipData, BipGuard, BipTransition}
+import vct.col.rewrite.ConstatifyFinalFieldsHelpers.{CLASS_DEFAULT_LEVEL, METHOD_DEFAULT_LEVEL}
 import vct.col.serialize.DecreasesClause
 import vct.result.VerificationError.{Unreachable, UserError}
 
@@ -413,18 +414,18 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
           case Some(DecreasesClauseTuple(Seq(lvl))) =>
             lvl match {
               case iv@IntegerValue(_) => iv.value
-              case _ => BigInt.int2bigInt(0)
+              case _ => CLASS_DEFAULT_LEVEL
             }
-          case _ => BigInt.int2bigInt(0)
+          case _ => CLASS_DEFAULT_LEVEL
         }
         val superLevel = superClass match {
           case Some(jc) if (jc.name != "Object") => jc.staticLevel match {
             case Some(DecreasesClauseTuple(Seq(lvl))) =>
               lvl match {
                 case iv@IntegerValue(_) => Some(iv.value)
-                case _ => ???
+                case _ => Some(CLASS_DEFAULT_LEVEL)
               }
-            case _ => Some(BigInt.int2bigInt(0))
+            case _ => Some(CLASS_DEFAULT_LEVEL)
           }
           case _ => None
         }

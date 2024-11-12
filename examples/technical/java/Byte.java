@@ -1,5 +1,5 @@
+// implicit static_level 1;
 /*@
-  static_level 1;
   dup_static_invariant Perm(Byte.cache, read) ** Byte.cache != null ** Byte.cache.length == 256;
   dup_static_invariant (\forall* int i ; 0 <= i && i < Byte.cache.length ; Perm(Byte.cache[i], read));
   dup_static_invariant (\forall* int i, int j; 0 <= i && i < Byte.cache.length && i < j && j < Byte.cache.length ; Byte.cache[i] != Byte.cache[j]);
@@ -9,12 +9,14 @@ class Byte {
     byte value;
     final static Byte[] cache;
 
+    //@ static_level 0;
     //@ decreases;
     //@ ensures Perm(this.value, write) ** this.value == value;
     public Byte(byte value) {
         this.value = value;
     }
 
+    // implicit static level 0;
     static {
         cache = new Byte[256];
         //@ loop_invariant 0 <= i && i <= 256 ** Perm(Byte.cache, read) ** Byte.cache != null ** Byte.cache.length == 256;
@@ -34,7 +36,7 @@ class Byte {
     @*/
     public static Byte valueOf(byte b) {
         final int offset = 128;
-        Byte js = new Byte(5);  // inhale \initialized(Byte);
+        Byte js = new Byte(5);
 
         //@ openDupInv Byte;
         return Byte.cache[(int)b + offset];

@@ -5,7 +5,7 @@ class A {
 
     static int a;
 
-    //@ static_level 1;
+    // implicit static_level 1;
     static {
         B.m(); // rejected because there is a cycle
         a = 4;
@@ -19,7 +19,7 @@ class A2 {
 
     static int a2;
 
-    //@ static_level 6;
+    // implicit static_level 6;
     static {
         B.m(); // okay because no cycle
         a2 = 4;
@@ -32,7 +32,7 @@ class A2 {
 class B extends C {
 
     //@ decreases;
-    //@ static_level 1;
+    // implicit static_level 1;
     public static void m(){
         return;
     }
@@ -44,12 +44,11 @@ class C {
 
     static int c;
 
-    //@ static_level 3;
+    // implicit static_level 3;
     static {
         //@ openInv A write;
         int a = A.a;
         c = a;
         //@ closeInv A write;
     }
-
 }

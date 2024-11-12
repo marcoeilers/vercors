@@ -1,7 +1,8 @@
 
-
+// implicit static level 1
 class HashMapIntInt {
 
+    // implicit static level 1
     //@ ensures Perm(contents, write);
     //@ ensures contents == map<int,int>{};
     public HashMapIntInt() {};
@@ -9,18 +10,21 @@ class HashMapIntInt {
 
     //@ ghost map<int, int> contents = map<int,int>{};
 
+    // implicit static level 1
     //@ decreases;
     //@ requires Perm(contents, write);
     //@ ensures Perm(contents, write);
     //@ ensures contents == \old(contents.add(key, value));
     public void put(int key, int value);
 
+    // implicit static level 1
     //@ decreases;
     //@ requires Perm(contents, read);
     //@ requires key \in contents;
     //@ ensures \result == contents[key];
     public /*@ pure @*/ int get(int key);
 
+    // implicit static level 1
     //@ decreases;
     //@ requires Perm(contents, read);
     //@ ensures \result == key \in contents;
@@ -30,6 +34,7 @@ class HashMapIntInt {
 
 //@ resource StaticInv()= Perm(ConcFib.cache, write) ** Perm(ConcFib.cache.contents, write) ** (0 \in ConcFib.cache.contents) ** (1 \in ConcFib.cache.contents) ** (\forall int i; i \in ConcFib.cache.contents; ConcFib.cache.contents[i] == ConcFib.fibSpec(i));
 
+// implicit static level 1
 //@ lock_invariant StaticInv();
 class ConcFibLock {}
 
@@ -40,7 +45,7 @@ class ConcFib {
     private static HashMapIntInt cache;
     private static ConcFibLock lock;
 
-    //@ static_level 2;
+    // implicit static_level 2;
     static {
         cache = new HashMapIntInt();
         cache.put(0, 1);
@@ -50,6 +55,7 @@ class ConcFib {
         //@ commit lock;
     }
 
+    // implicit static level 1
     public static /*@ pure @*/ int fibSpec(int n){
         if (n <= 1) {
             return 1;

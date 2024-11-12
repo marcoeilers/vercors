@@ -1,10 +1,10 @@
-//@ static_level 1;
+// implicit static_level 1;
 class Name {
     private final int _start;
     private final int _length;
 
     //@ decreases;
-    //@ static_level 0;
+    // implicit static_level 0;
     //@ ensures Perm(this._start, write) ** Perm(this._length, write);
     //@ ensures this._start == start;
     //@ ensures this._length == length;
@@ -30,7 +30,7 @@ class Name {
 class Names {
     public static final static String[] chrs;
 
-    //@ static_level 0;
+    // implicit static_level 1;
     static {
         chrs = new String[131072];
     }
@@ -70,7 +70,7 @@ class StdNames {
     public static final Name Array;
     public static final Name List;
 
-    //@ static_level 3;
+    // implicit static_level 3;
     static {
         //@ openInv Names write;
         AnyRef = Names.name("AnyRef");
@@ -93,7 +93,7 @@ class StdNamesAlt {
     public static final Name Array;
     public static final Name List;
 
-    //@ static_level 4;
+    // implicit static_level 4;
     static {
         AnyRef = Names.nameAlt("AnyRef");
         Array = Names.nameAlt("Array");
