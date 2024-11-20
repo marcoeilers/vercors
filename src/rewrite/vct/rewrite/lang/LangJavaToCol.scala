@@ -103,7 +103,7 @@ case object LangJavaToCol {
   }
 
   case class InvalidSubclassLevel(jc: JavaClassOrInterface[_]) extends UserError {
-    override def text: String = jc.o.messageInContext("The static level of this class must be greater than that of its superclass.")
+    override def text: String = jc.o.messageInContext("The static level of this class must not be less than that of its superclass.")
 
     override def code: String = "invalidSubclassLevel"
   }
@@ -429,7 +429,7 @@ case class LangJavaToCol[Pre <: Generation](rw: LangSpecificToCol[Pre]) extends 
           }
           case _ => None
         }
-        if (superLevel.isDefined && myLevel <= superLevel.get) {
+        if (superLevel.isDefined && myLevel < superLevel.get) {
           throw InvalidSubclassLevel(cls)
         }
     }

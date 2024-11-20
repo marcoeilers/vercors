@@ -644,7 +644,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
         case _ => throw new RuntimeException("Static level must be an integer.")
       }
       val currentLevel = getCurrentLevelValue(o)
-      val levelOkay = Less[Post](IntegerValue(clsLevel), currentLevel)
+      val levelOkay = LessEq[Post](IntegerValue(clsLevel), currentLevel)
       val initFI = FunctionInvocation[Post](initializedFunctionMap.ref(jc.name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))
       val newVar = new Variable[Post](TRational[Post]()())
       val newVarPos = Less(NoPerm(), newVar.get)
