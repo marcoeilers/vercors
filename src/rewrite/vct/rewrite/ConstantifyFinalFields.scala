@@ -535,11 +535,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val assumeInit = Inhale[Post](initialized)(initOrigin)
       implicit val o: Origin = stat.o
 
-      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
-      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
-      val assertLevelOkay = Assert(levelOkay)(o)
-
-      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
+      Block(Seq(assumeInit, rewriteDefault(stat)))
     case Eval(PreAssignExpression(Deref(obj, Ref(field: InstanceField[Pre])), value)) if (field.o match {
       case jf: JavaFieldOrigin => jf.fields.isStatic
       case _ => false
@@ -555,11 +551,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val assumeInit = Inhale[Post](initialized)(initOrigin)
       implicit val o: Origin = stat.o
 
-      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
-      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
-      val assertLevelOkay = Assert(levelOkay)(o)
-
-      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
+      Block(Seq(assumeInit, rewriteDefault(stat)))
     case Assign(trgt, Deref(obj, Ref(field: InstanceField[Pre]))) if (field.o match {
       case jf: JavaFieldOrigin => jf.fields.isStatic
       case _ => false
@@ -574,11 +566,8 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(initOrigin)
       val assumeInit = Inhale[Post](initialized)(initOrigin)
       implicit val o: Origin = stat.o
-      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
-      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
-      val assertLevelOkay = Assert(levelOkay)(o)
 
-      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
+      Block(Seq(assumeInit, rewriteDefault(stat)))
     case Eval(PreAssignExpression(trgt, Deref(obj, Ref(field: InstanceField[Pre])))) if (field.o match {
       case jf: JavaFieldOrigin => jf.fields.isStatic
       case _ => false
@@ -593,11 +582,8 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val initialized = FunctionInvocation[Post](initializedFunctionMap.ref(name), Nil, Nil, Nil, Nil)(PanicBlame("requires nothing"))(initOrigin)
       val assumeInit = Inhale[Post](initialized)(initOrigin)
       implicit val o: Origin = stat.o
-      val classLevel = IntegerValue[Post](classLevels.getOrElse(name, 0))
-      val levelOkay = Implies(Not(initialized), GreaterEq(getCurrentLevelValue(o), classLevel))
-      val assertLevelOkay = Assert(levelOkay)(o)
 
-      Block(Seq(assertLevelOkay, assumeInit, rewriteDefault(stat)))
+      Block(Seq(assumeInit, rewriteDefault(stat)))
     case CloseStaticInv(cls, amt) =>
       implicit val o: Origin = stat.o
       val clsDecl = cls.asInstanceOf[TypeValue[Pre]].value.asInstanceOf[TClass[Pre]].cls.decl
