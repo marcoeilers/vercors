@@ -32,6 +32,11 @@ case object EncodeCurrentThread extends RewriterBuilder {
     override def text: String =
       node.o.messageInContext("This invocation refers to an applicable that is thread local, but the surrounding context is not thread local.")
   }
+
+  case class MisplacedThreadLocalAssertion(node: Initialized[_]) extends MisplacedCurrentThreadReference {
+    override def text: String =
+      node.o.messageInContext("This assertion is thread local, but the surrounding context is not thread local.")
+  }
 }
 
 case class EncodeCurrentThread[Pre <: Generation]() extends Rewriter[Pre] {
@@ -82,6 +87,11 @@ case class EncodeCurrentThread[Pre <: Generation]() extends Rewriter[Pre] {
       } else {
         currentThreadId.top
       }
+    case i: Initialized[Pre] =>
+      if (currentThreadId.isEmpty) {
+        throw MisplacedThreadLocalAssertion(i)
+      }
+      rewriteDefault(i)
     case apply: Apply[Pre] =>
       if(wantsThreadLocal(apply.ref.decl)) {
         if(currentThreadId.isEmpty) {
