@@ -8,6 +8,7 @@ import vct.col.origin.{Blame, InvocationFailure, Origin, PanicBlame, ReadableOri
 import vct.col.ref.{DirectRef, Ref}
 import vct.col.rewrite.ConstatifyFinalFieldsHelpers.{AssumingInitializedOrigin, CLASS_DEFAULT_LEVEL, CheckingLevelGeOrigin, CheckingLevelGtOrigin, METHOD_DEFAULT_LEVEL, MarcoHelperOrigin, initializerDefaultLevel}
 import vct.col.rewrite.EncodeArrayValues.ArrayCreationOrigin
+import vct.col.rewrite.EncodeCurrentThread.MisplacedThreadLocalAssertion
 import vct.col.rewrite.exc.EncodeBreakReturn.ReturnClass
 import vct.col.rewrite.lang.LangJavaToCol.{JavaConstructorOrigin, JavaFieldOrigin, JavaInitializedFunctionOrigin, JavaInstanceClassOrigin, JavaMethodOrigin, JavaStaticsClassOrigin, JavaStaticsClassSingletonOrigin, JavaTokenPredicateOrigin}
 import vct.col.util.SuccessionMap
@@ -122,11 +123,12 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
             jc.staticInvariant match {
               case Some(inv) =>
                 classInvs += jc.name -> inv
-                val initializedFacts = inv.transSubnodes.collect(n => n match {
+                val threadLocalFacts = inv.transSubnodes.collect(n => n match {
                   case i: Initialized[_] => i
+                  case oi: OnInit[_] => oi
                 })
-                if (initializedFacts.nonEmpty) {
-                  throw new RuntimeException("Static invariants must not contain \\initialized(...) assertions.")
+                if (threadLocalFacts.nonEmpty) {
+                  throw MisplacedThreadLocalAssertion(threadLocalFacts.head)
                 }
               case None =>
             }
