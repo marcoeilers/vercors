@@ -1068,7 +1068,7 @@ case class PVLToCol[G](override val originProvider: OriginProvider, override val
   }
 
   def convert(implicit e: ValPrimaryBinderContext): Expr[G] = e match {
-    case ValQuantifier(_, symbol, bindings, _, bodyOrCond, maybeBody, _) =>
+    case ValQuantifier(_, symbol, bindings, _, maybeTrigger, bodyOrCond, maybeBody, _) =>
       val (variables, bindingConds) = convert(bindings)
       val (bodyConds, body) = maybeBody match {
         case Some(ValBinderCont0(_, body)) => (Seq(convert(bodyOrCond)), convert(body))

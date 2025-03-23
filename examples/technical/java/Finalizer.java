@@ -1,10 +1,12 @@
 
 /*@ lock_invariant Perm(Finalizer.unfinalized, write) ** Perm(Finalizer.allocs, 1\2) ** (Finalizer.unfinalized != null ==> (Finalizer.unfinalized \in Finalizer.allocs)) **
                    (\forall* int i, int j; 0 <= i && i < j && j < |Finalizer.allocs|; Finalizer.allocs[i] != Finalizer.allocs[j]) **
-                   (\forall* int i; 0 <= i && i < |Finalizer.allocs|;
+                   (\forall* int i; { Finalizer.allocs[i] } 0 <= i && i < |Finalizer.allocs|;
                         Perm(Finalizer.allocs[i].next, write) ** Perm(Finalizer.allocs[i].prev, write) **
-                        (Finalizer.allocs[i] != null) **
-                        (Finalizer.allocs[i].prev == (i == 0 ? null : Finalizer.allocs[i - 1])) **
+                        (Finalizer.allocs[i] != null)) **
+                    (\forall* int i; { Finalizer.allocs[i].prev } 0 <= i && i < |Finalizer.allocs|;
+                        (Finalizer.allocs[i].prev == (i == 0 ? null : Finalizer.allocs[i - 1]))) **
+                    (\forall* int i; { Finalizer.allocs[i].next } 0 <= i && i < |Finalizer.allocs|;
                         (Finalizer.allocs[i].next == (i == |Finalizer.allocs| - 1 ? null : Finalizer.allocs[i + 1])))
                         ** (|Finalizer.allocs| == 0 ? Finalizer.unfinalized == null : Finalizer.allocs[0] == Finalizer.unfinalized);
  */
@@ -111,8 +113,8 @@ class Finalizer {
                 //@ ghost seq<Finalizer> allocsBefore = allocs;
                 //@ ghost seq<Finalizer> allocsP = allocs[ .. myIndex] + allocs[myIndex + 1 .. ];
                 //@ assert |allocsBefore| == |allocsP| + 1;
-                //@ assert (\forall int i; 0 <= i && i < myIndex; allocsBefore[i] == allocsP[i]);
-                //@ assert (\forall int i; myIndex < i && i < |allocsP|; allocsBefore[i+1] == allocsP[i]);
+                //@ assert (\forall int i; { allocsP[i] } 0 <= i && i < myIndex; allocsBefore[i] == allocsP[i]);
+                //@ assert (\forall int i; { allocsP[i] } myIndex < i && i < |allocsP|; allocsBefore[i+1] == allocsP[i]);
                 //@ ghost allocs = allocsP;
                 this.prev.next = this.next;
             }

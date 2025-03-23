@@ -683,7 +683,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
       val in = Inhale[Post](Implies(initFI, foldStar(Seq(newVarPos, scaledInv))))(stat.o)
       translatingStatement = true
       Scope(Seq(newVar), Block(Seq(ex, in)))(stat.o)
-    case _: Inhale[Pre] | _: Exhale[Pre] =>
+    case _: Inhale[Pre] | _: Exhale[Pre] | _: Assert[Pre] | _: Fold[Pre] | _: Unfold[Pre] =>
       translatingStatement = false
       val res = rewriteDefault(stat)
       translatingStatement = true

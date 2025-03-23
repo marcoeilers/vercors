@@ -217,9 +217,13 @@ valBindings
 valBinderCont: ';' langExpr;
 
 valPrimaryBinder
- : '(' valBinderSymbol valBindings ';' langExpr valBinderCont? ')' # valQuantifier
+ : '(' valBinderSymbol valBindings ';' valTrigger? langExpr valBinderCont? ')' # valQuantifier
  | '(' '\\let' langType langId '=' langExpr ';' langExpr ')' # valLet
  | '(' '\\forperm' valArgList '\\in' langExpr ';' langExpr ')' #valForPerm
+ ;
+
+valTrigger
+ : '{' langExpr '}'
  ;
 
 valPrimaryVector

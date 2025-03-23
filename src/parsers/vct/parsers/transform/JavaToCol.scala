@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import hre.util.FuncTools
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import vct.col.ast._
-import vct.antlr4.generated.JavaParser._
+import vct.antlr4.generated.JavaParser.{ValTrigger0Context, _}
 import vct.antlr4.generated.JavaParserPatterns._
 import vct.col.{ast => col}
 import vct.col.origin._
@@ -1443,16 +1443,20 @@ case class JavaToCol[G](override val originProvider: OriginProvider, override va
   }
 
   def convert(implicit e: ValPrimaryBinderContext): Expr[G] = e match {
-    case ValQuantifier(_, symbol, bindings, _, bodyOrCond, maybeBody, _) =>
+    case ValQuantifier(_, symbol, bindings, _, maybeTrigger, bodyOrCond, maybeBody, _) =>
       val (variables, bindingConds) = convert(bindings)
       val (bodyConds, body) = maybeBody match {
         case Some(ValBinderCont0(_, body)) => (Seq(convert(bodyOrCond)), convert(body))
         case None => (Nil, convert(bodyOrCond))
       }
+      val trigger = maybeTrigger match {
+        case Some(t) => Seq(Seq(convert(t.asInstanceOf[ValTrigger0Context].langExpr())))
+        case _ => Nil
+      }
       val conds = bindingConds ++ bodyConds
       symbol match {
-        case ValForallSymb(_) => Forall(variables, Nil, implies(conds, body))
-        case ValStarallSymb(_) => Starall(variables, Nil, implies(conds, body))(blame(e))
+        case ValForallSymb(_) => Forall(variables, trigger, implies(conds, body))
+        case ValStarallSymb(_) => Starall(variables, trigger, implies(conds, body))(blame(e))
         case ValExistsSymb(_) => Exists(variables, Nil, foldAnd(conds :+ body))
       }
     case ValLet(_, _, t, id, _, v, _, body, _) =>
