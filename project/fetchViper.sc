@@ -16,7 +16,7 @@ object silverGit extends
 
 object siliconGit extends GitModule {
   def url = T { "https://github.com/viperproject/silicon.git" }
-  def commitish = T { "fe9222fb269d41ab94e642c2ab89e8ceae1903b1" }
+  def commitish = T { "57da779a839177ad0c79b7a32cc3d56c38253697" }
 }
 
 object carbonGit extends GitModule {
