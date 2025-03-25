@@ -31,7 +31,9 @@ trait SeparatePackedResourcesModule extends JavaModule {
   }
 
   def localPackedClasspath = T {
-    packedResources() ++ Agg(compile().classes)
+    val res = packedResources() ++ Agg(compile().classes)
+    println(res)
+    res
   }
 
   def transitiveLocalPackedClasspath = T {
@@ -58,6 +60,7 @@ trait SeparatePackedResourcesModule extends JavaModule {
   }
 
   def assembly = T {
+    println(localPackedClasspath().map(_.path))
     Jvm.createAssembly(
       Agg.from(localPackedClasspath().map(_.path)),
       manifest(),

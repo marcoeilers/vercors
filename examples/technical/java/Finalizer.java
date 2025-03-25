@@ -107,14 +107,9 @@ class Finalizer {
                 //@ ghost seq<Finalizer> allocsP = allocs[1 .. ];
                 //@ ghost allocs = allocsP;
             } else {
-                //@ assert (\exists int i; 0 <= i && i < |allocs|; allocs[i] == this);
-                //@ ghost int myIndex = getUnconstrainedInt();
-                //@ assume 0 <= myIndex && myIndex < |allocs| && allocs[myIndex] == this;
+                //@ ghost int myIndex = getIndexOf(allocs, this);
                 //@ ghost seq<Finalizer> allocsBefore = allocs;
-                //@ ghost seq<Finalizer> allocsP = allocs[ .. myIndex] + allocs[myIndex + 1 .. ];
-                //@ assert |allocsBefore| == |allocsP| + 1;
-                //@ assert (\forall int i; { allocsP[i] } 0 <= i && i < myIndex; allocsBefore[i] == allocsP[i]);
-                //@ assert (\forall int i; { allocsP[i] } myIndex < i && i < |allocsP|; allocsBefore[i+1] == allocsP[i]);
+                //@ ghost seq<Finalizer> allocsP = dropElement(allocs, myIndex);
                 //@ ghost allocs = allocsP;
                 this.prev.next = this.next;
             }
@@ -139,6 +134,16 @@ class Finalizer {
     }
 
     /*@
-    ghost int getUnconstrainedInt();
+    requires (\exists int i; 0 <= i && i < |allocs|; allocs[i] == f);
+    ensures 0 <= \result && \result < |allocs| && allocs[\result] == f;
+    pure int getIndexOf(seq<Finalizer> allocs, Finalizer f);
     */
+
+    /*@
+    requires 0 <= index && index < |allocs|;
+    ensures |allocs| == |\result| + 1;
+    ensures (\forall int i; { \result[i] } 0 <= i && i < index; allocs[i] == \result[i]);
+    ensures (\forall int i; { \result[i] } index < i && i < |\result|; allocs[i+1] == \result[i]);
+    pure seq<Finalizer> dropElement(seq<Finalizer> allocs, int index) = allocs[ .. index] + allocs[index + 1 .. ];
+     */
 }

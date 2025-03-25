@@ -88,11 +88,17 @@ object vercors extends VercorsModule {
 		"silicon" -> "viper.silicon.SiliconRunner",
 		"bashOptions" -> "vct.options.BashCompletion",
 	) }
-	def packedResources = T.sources()
+	def packedResources = {
+		val root = implicitly[define.Ctx].millSourcePath / os.up
+		T.sources {
+			Seq(root / "res" / "universal" / "res",
+				root / "res" / "universal" / "deps").map(PathRef(_))
+		}
+	}
 	def bareResourcePaths = T {
 		Seq(
-			Dir.res / "universal" / "res",
-			Dir.res / "universal" / "deps",
+			root / "res" / "universal" / "res",
+			root / "res" / "universal" / "deps",
 		)
 	}
 

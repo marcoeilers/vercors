@@ -71,12 +71,15 @@ case object Verify extends LazyLogging {
       case _: IllegalArgumentException =>
     }
 
+    val timeBefore = System.currentTimeMillis()
+
     verifyWithOptions(options, options.inputs) match {
       case Left(err) =>
         logger.error(err.text)
         EXIT_CODE_ERROR
       case Right((Nil, report)) =>
         logger.info("Verification completed successfully.")
+        println("Time" + (System.currentTimeMillis() - timeBefore))
         friendlyHandleBipReport(report, options.bipReportFile)
         EXIT_CODE_SUCCESS
       case Right((fails, report)) =>
