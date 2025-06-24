@@ -79,7 +79,7 @@ case object Verify extends LazyLogging {
         EXIT_CODE_ERROR
       case Right((Nil, report)) =>
         logger.info("Verification completed successfully.")
-        println("Time" + (System.currentTimeMillis() - timeBefore))
+        println("Verification took " + (System.currentTimeMillis() - timeBefore) + " ms.")
         friendlyHandleBipReport(report, options.bipReportFile)
         EXIT_CODE_SUCCESS
       case Right((fails, report)) =>
