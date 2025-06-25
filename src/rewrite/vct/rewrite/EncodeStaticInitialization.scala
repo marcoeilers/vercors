@@ -6,7 +6,7 @@ import vct.col.util.AstBuildHelpers._
 import vct.col.ast.node.NodeImpl
 import vct.col.origin.{Blame, InvocationFailure, Origin, PanicBlame, ReadableOrigin, TrueSatisfiable}
 import vct.col.ref.{DirectRef, Ref}
-import vct.col.rewrite.ConstatifyFinalFieldsHelpers.{AssumingInitializedOrigin, CLASS_DEFAULT_LEVEL, CheckingLevelGeOrigin, CheckingLevelGtOrigin, METHOD_DEFAULT_LEVEL, MarcoHelperOrigin, initializerDefaultLevel}
+import vct.col.rewrite.ConstatifyFinalFieldsHelpers.{AssumingInitializedOrigin, CLASS_DEFAULT_LEVEL, CheckingLevelGeOrigin, CheckingLevelGtOrigin, METHOD_DEFAULT_LEVEL, HelperFunctionOrigin, initializerDefaultLevel}
 import vct.col.rewrite.EncodeArrayValues.ArrayCreationOrigin
 import vct.col.rewrite.EncodeCurrentThread.MisplacedThreadLocalAssertion
 import vct.col.rewrite.exc.EncodeBreakReturn.ReturnClass
@@ -20,12 +20,12 @@ case object ConstatifyFinalFieldsHelpers {
   def initializerDefaultLevel(classLevel: BigInt) =
     if (classLevel > 0) classLevel - 1 else BigInt.int2bigInt(0)
 
-  case class MarcoHelperOrigin(name: String) extends Origin {
+  case class HelperFunctionOrigin(name: String) extends Origin {
     override def preferredName: String = name + "Helper"
 
-    override def shortPosition: String = "marco"
+    override def shortPosition: String = "unknown"
 
-    override def context: String = "[Nowhere, Marco added some things]"
+    override def context: String = "[asserting and assuming helpers]"
 
     override def inlineContext: String = "[asserting and assuming helpers]"
   }
@@ -61,15 +61,15 @@ case object ConstatifyFinalFieldsHelpers {
   }
 }
 
-case class ConstantifyFinalFieldsBuilder(sequential: Boolean) extends RewriterBuilder {
+case class EncodeStaticInitializationBuilder(sequential: Boolean) extends RewriterBuilder {
 
-  override def apply[Pre <: Generation](): AbstractRewriter[Pre, _ <: Generation] = ConstantifyFinalFields(sequential)
+  override def apply[Pre <: Generation](): AbstractRewriter[Pre, _ <: Generation] = EncodeStaticInitialization(sequential)
   override def key: String = "constantFinalFields"
   override def desc: String = "Encode final fields with functions, so that they are not on the heap."
 
 }
 
-case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false) extends Rewriter[Pre] {
+case class EncodeStaticInitialization[Pre <: Generation](sequential: Boolean = false) extends Rewriter[Pre] {
   val currentClass: ScopedStack[Class[Pre]] = ScopedStack()
 
   var tokenPredMap: Map[String, Predicate[Post]] = Map()
@@ -236,7 +236,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
 
   override def dispatch(decl: Declaration[Pre]): Unit = {
     onceStuff.getOrElseUpdate("assuming", {
-      implicit val o: Origin = MarcoHelperOrigin("assuming")
+      implicit val o: Origin = HelperFunctionOrigin("assuming")
       val assumingPreVar = new Variable[Post](TBool[Post]())
       val assumingResTVar = new Variable[Post](TType[Post](TAny()))
       val assumingResVar = new Variable[Post](TVar[Post](assumingResTVar.ref))
@@ -253,7 +253,7 @@ case class ConstantifyFinalFields[Pre <: Generation](sequential: Boolean = false
     })
 
     onceStuff.getOrElseUpdate("asserting", {
-      implicit val o: Origin = MarcoHelperOrigin("asserting")
+      implicit val o: Origin = HelperFunctionOrigin("asserting")
       val assertingPreVar = new Variable[Post](TBool[Post]())
       val assertingResTVar = new Variable[Post](TType[Post](TAny()))
       val assertingResVar = new Variable[Post](TVar[Post](assertingResTVar.ref))

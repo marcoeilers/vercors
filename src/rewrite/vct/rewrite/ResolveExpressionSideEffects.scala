@@ -7,7 +7,7 @@ import vct.col.ast._
 import vct.col.rewrite.error.ExtraNode
 import vct.col.origin.{DerefAssignTarget, Origin, SubscriptAssignTarget}
 import vct.col.ref.Ref
-import vct.col.rewrite.ConstatifyFinalFieldsHelpers.MarcoHelperOrigin
+import vct.col.rewrite.ConstatifyFinalFieldsHelpers.HelperFunctionOrigin
 import vct.col.rewrite.{Generation, NonLatchingRewriter, Rewriter, RewriterBuilder}
 import vct.result.VerificationError.{Unreachable, UserError}
 
@@ -384,7 +384,7 @@ case class ResolveExpressionSideEffects[Pre <: Generation]() extends Rewriter[Pr
     case ArraySubscript(arr, index) => ArraySubscript[Post](notInlined(arr), notInlined(index))(SubscriptAssignTarget)(target.o)
     case PointerSubscript(arr, index) => PointerSubscript[Post](notInlined(arr), notInlined(index))(SubscriptAssignTarget)(target.o)
     case deref@DerefPointer(ptr) => DerefPointer[Post](notInlined(ptr))(deref.blame)(target.o)
-    case fi: FunctionInvocation[Pre] if fi.ref.decl.o.isInstanceOf[MarcoHelperOrigin] => assignTargetHelper(fi.args(1))
+    case fi: FunctionInvocation[Pre] if fi.ref.decl.o.isInstanceOf[HelperFunctionOrigin] => assignTargetHelper(fi.args(1))
     case other => ???
   }
 

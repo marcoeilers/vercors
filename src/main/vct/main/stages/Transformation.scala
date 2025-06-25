@@ -230,10 +230,8 @@ case class SilverTransformation
     // Encode proof helpers
     EncodeProofHelpers,
 
-    // Make final fields constant functions. Explicitly before ResolveExpressionSideEffects, because that pass will
-    // flatten out functions in the rhs of assignments, making it harder to detect final field assignments where the
-    // value is pure and therefore be put in the contract of the constant function.
-    ConstantifyFinalFieldsBuilder(sequentialJavaInitMode),
+    // Encode everything related to static fields and initialization
+    EncodeStaticInitializationBuilder(sequentialJavaInitMode),
 
     // Resolve side effects including method invocations, for encodetrythrowsignals.
     ResolveExpressionSideEffects,
